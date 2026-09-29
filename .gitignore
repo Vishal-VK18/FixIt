@@ -21,3 +21,9 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+
+# Local app data
+__pycache__/
+tickets.db
+.env
+*.env

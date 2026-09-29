@@ -1,0 +1,1845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <meta content="web_dashboard" name="shell-type"/>
+  <title>CampusCare — Smart Campus Maintenance Platform</title>
+
+  <!-- Google Fonts: Inter & Material Symbols Outlined -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin=""/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+
+  <style>
+    @layer base {
+      html, body { margin: 0; padding: 0; }
+      body { overscroll-behavior: none; }
+      main > :first-child { margin-top: 0 !important; }
+      main > :last-child { margin-bottom: 0 !important; }
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f0eee8; }
+    ::-webkit-scrollbar-thumb { background: #c1c7ce; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #8fbfe3; }
+    .nav-item.active {
+      background-color: #8fbfe3 !important;
+      color: #174e6d !important;
+      font-weight: 600 !important;
+    }
+    .modal-backdrop {
+      background-color: rgba(27, 28, 25, 0.55);
+      backdrop-filter: blur(4px);
+    }
+  </style>
+
+  <!-- Tailwind CSS via official CDN with exact Stitch design system configuration -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "inverse-surface": "#30312d",
+            "on-primary-fixed-variant": "#134b6a",
+            "surface-container": "#f0eee8",
+            "secondary-fixed": "#ede2bb",
+            "background": "#fbf9f3",
+            "primary-fixed-dim": "#9cccf1",
+            "tertiary-container": "#a9bbce",
+            "on-primary-container": "#174e6d",
+            "primary-container": "#8fbfe3",
+            "surface-container-low": "#f5f3ee",
+            "outline-variant": "#c1c7ce",
+            "tertiary-fixed": "#d2e4f8",
+            "on-tertiary": "#ffffff",
+            "error": "#ba1a1a",
+            "secondary": "#665e3f",
+            "inverse-on-surface": "#f2f1eb",
+            "primary": "#316383",
+            "surface-bright": "#fbf9f3",
+            "surface-dim": "#dbdad4",
+            "on-secondary-fixed-variant": "#4d472a",
+            "on-tertiary-container": "#3a4b5b",
+            "secondary-container": "#eae0b8",
+            "surface-container-lowest": "#ffffff",
+            "inverse-primary": "#9cccf1",
+            "surface-tint": "#316383",
+            "tertiary-fixed-dim": "#b7c8db",
+            "on-surface": "#1b1c19",
+            "on-secondary-fixed": "#201c04",
+            "on-error-container": "#93000a",
+            "on-background": "#1b1c19",
+            "surface-variant": "#e4e2dd",
+            "outline": "#71787e",
+            "on-tertiary-fixed-variant": "#384958",
+            "surface-container-highest": "#e4e2dd",
+            "error-container": "#ffdad6",
+            "on-primary": "#ffffff",
+            "surface": "#fbf9f3",
+            "primary-fixed": "#c9e6ff",
+            "surface-container-high": "#eae8e2",
+            "on-secondary": "#ffffff",
+            "on-primary-fixed": "#001e2f",
+            "on-error": "#ffffff",
+            "on-tertiary-fixed": "#0b1d2b",
+            "on-surface-variant": "#41474d",
+            "secondary-fixed-dim": "#d1c7a0",
+            "on-secondary-container": "#6a6343",
+            "tertiary": "#4f6071"
+          },
+          borderRadius: {
+            DEFAULT: "0.25rem",
+            lg: "0.5rem",
+            xl: "0.75rem",
+            "2xl": "1rem",
+            full: "9999px"
+          },
+          spacing: {
+            "margin-sm": "1rem",
+            gutter: "1.5rem",
+            "margin-lg": "3rem",
+            "space-2xl": "3rem",
+            "space-xs": "0.25rem",
+            "gutter-lg": "2rem",
+            "gutter-sm": "1rem",
+            margin: "1.5rem",
+            "space-sm": "0.5rem",
+            "space-xl": "2rem",
+            "space-md": "1rem",
+            "space-lg": "1.5rem"
+          },
+          fontFamily: {
+            body: ["Inter", "sans-serif"],
+            display: ["Inter", "sans-serif"]
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="bg-background font-body text-body-md text-on-surface antialiased selection:bg-primary-container selection:text-on-primary-container">
+
+  <!-- Mobile Sidebar Overlay -->
+  <div id="mobile-sidebar-overlay" class="fixed inset-0 bg-black/40 z-40 hidden lg:hidden transition-opacity"></div>
+
+  <!-- FIXED SIDEBAR NAVIGATION -->
+  <aside id="main-sidebar" class="fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.04)] transition-transform duration-300 -translate-x-full lg:translate-x-0">
+    <div class="flex flex-col h-full overflow-hidden">
+      <!-- Brand Logo Header -->
+      <div class="p-space-lg flex items-center justify-between bg-surface-container-low">
+        <div class="flex items-center gap-space-sm cursor-pointer" onclick="navigateTo('report-issue')">
+          <!-- Local SVG Logo -->
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" class="h-8 w-8 shrink-0" fill="none">
+            <rect width="48" height="48" rx="14" fill="#8FBFE3"/>
+            <path d="M24 10L12 18V36C12 37.1 12.9 38 14 38H34C35.1 38 36 37.1 36 36V18L24 10Z" fill="#F6EBC3"/>
+            <path d="M24 14L16 20V34H32V20L24 14Z" fill="#FFFDF7"/>
+            <path d="M21 27C21 25.3431 22.3431 24 24 24C25.6569 24 27 25.3431 27 27V34H21V27Z" fill="#8FBFE3"/>
+            <circle cx="24" cy="20" r="2.5" fill="#263746"/>
+            <path d="M30 16L34 19M34 16L30 19" stroke="#263746" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <div class="flex flex-col">
+            <span class="font-bold text-on-surface leading-none tracking-tight text-lg">CAMPUSCARE</span>
+            <span class="text-[11px] text-on-surface-variant font-medium mt-0.5">Smart Campus Maintenance</span>
+          </div>
+        </div>
+        <button id="sidebar-close-btn" aria-label="Toggle navigation" class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container p-1.5 rounded-lg transition-colors flex items-center justify-center" type="button">
+          <span class="material-symbols-outlined text-[20px]">left_panel_close</span>
+        </button>
+      </div>
+
+      <!-- Navigation Links Container -->
+      <div class="flex-1 overflow-y-auto px-space-md py-space-sm space-y-space-md">
+        <!-- Mode Switcher: Student vs Operations -->
+        <div class="p-1 bg-surface-container rounded-lg flex items-center justify-between text-center select-none">
+          <button id="mode-student-btn" class="flex-1 py-1 px-2 rounded text-xs font-semibold bg-secondary-container text-on-secondary-container shadow-sm transition-all" onclick="setAppRole('student')" type="button">
+            Student Mode
+          </button>
+          <button id="mode-operations-btn" class="flex-1 py-1 px-2 rounded text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-all" onclick="setAppRole('admin')" type="button">
+            Operations
+          </button>
+        </div>
+
+        <!-- Student Portal Navigation -->
+        <div class="space-y-1" id="nav-student-section">
+          <div class="px-2 py-1 text-[11px] uppercase tracking-wider text-on-surface-variant font-semibold flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>Student Portal
+          </div>
+          <nav class="flex flex-col space-y-1">
+            <a href="/report-issue" data-path="report-issue" class="nav-item flex items-center gap-space-sm px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-sm font-medium">
+              <span class="material-symbols-outlined text-[20px]">add_a_photo</span>
+              <span>Report Issue</span>
+            </a>
+            <a href="/my-reports" data-path="my-reports" class="nav-item flex items-center gap-space-sm px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-sm font-medium">
+              <span class="material-symbols-outlined text-[20px]">receipt_long</span>
+              <span>My Reports</span>
+            </a>
+          </nav>
+        </div>
+
+        <!-- Admin Portal Navigation -->
+        <div class="space-y-1 pt-1" id="nav-admin-section">
+          <div class="px-2 py-1 text-[11px] uppercase tracking-wider text-on-surface-variant font-semibold flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-primary"></span>Admin Operations
+          </div>
+          <nav class="flex flex-col space-y-1">
+            <a href="/maintenance-dashboard" data-path="maintenance-dashboard" class="nav-item flex items-center gap-space-sm px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-sm font-medium">
+              <span class="material-symbols-outlined text-[20px]">analytics</span>
+              <span>Maintenance Dashboard</span>
+            </a>
+            <a href="/maintenance-tickets" data-path="maintenance-tickets" class="nav-item flex items-center gap-space-sm px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-sm font-medium">
+              <span class="material-symbols-outlined text-[20px]">confirmation_number</span>
+              <span>Maintenance Tickets</span>
+            </a>
+            <a href="/predictive-maintenance" data-path="predictive-maintenance" class="nav-item flex items-center gap-space-sm px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-sm font-medium">
+              <span class="material-symbols-outlined text-[20px]">troubleshoot</span>
+              <span>Predictive Engine</span>
+            </a>
+            <a href="/analytics" data-path="analytics" class="nav-item flex items-center gap-space-sm px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-sm font-medium">
+              <span class="material-symbols-outlined text-[20px]">monitoring</span>
+              <span>Analytics</span>
+            </a>
+            <a href="/settings" data-path="settings" class="nav-item flex items-center gap-space-sm px-3 py-2 rounded-lg text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all text-sm font-medium">
+              <span class="material-symbols-outlined text-[20px]">tune</span>
+              <span>Settings</span>
+            </a>
+          </nav>
+        </div>
+      </div>
+
+      <!-- User Profile Card -->
+      <div class="p-3 bg-surface-container-high m-2 rounded-xl">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2 min-w-0">
+            <div id="user-avatar" class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center text-xs font-bold text-on-secondary-container ring-2 ring-surface-container-lowest shrink-0">
+              AR
+            </div>
+            <div class="flex flex-col overflow-hidden">
+              <span id="user-name" class="text-xs font-semibold text-on-surface truncate">Alex Rivera</span>
+              <span id="user-role-label" class="text-[10px] text-on-surface-variant truncate">Student / Resident Advisor</span>
+            </div>
+          </div>
+          <button onclick="toggleRoleSwitch()" class="text-on-surface-variant hover:text-primary hover:bg-surface-container p-1 rounded-lg transition-colors flex items-center justify-center" title="Switch Role / Mode" type="button">
+            <span class="material-symbols-outlined text-[18px]">swap_horiz</span>
+          </button>
+        </div>
+        <div class="flex items-center justify-between pt-1 border-t border-surface-container">
+          <span class="text-[10px] text-on-surface-variant">Active Dorm</span>
+          <span id="user-dorm-badge" class="text-[10px] font-semibold text-on-surface bg-surface-container-lowest px-2 py-0.5 rounded-full">
+            Block C • 304
+          </span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN VIEWPORT CONTAINER (offset by sidebar w-72 on lg) -->
+  <div class="lg:pl-72 flex flex-col min-h-screen">
+    <!-- FIXED TOP HEADER -->
+    <header class="fixed top-0 left-0 lg:left-72 right-0 h-16 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-space-md lg:px-space-lg">
+      <div class="flex items-center gap-space-sm">
+        <button id="mobile-menu-toggle" class="lg:hidden text-on-surface-variant hover:text-on-surface p-1.5 rounded-lg hover:bg-surface-container" type="button">
+          <span class="material-symbols-outlined text-[24px]">menu</span>
+        </button>
+        <span class="font-bold text-on-surface tracking-tight text-base sm:text-lg">CAMPUSCARE</span>
+        <span class="text-outline-variant hidden sm:inline">•</span>
+        <span class="text-xs sm:text-sm text-on-surface-variant hidden sm:inline" id="header-context-title">Operations &amp; Student Service</span>
+      </div>
+
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Live Campus Operational Status Chip -->
+        <button id="campus-status-chip" onclick="navigateTo('maintenance-dashboard')" class="flex items-center gap-1.5 bg-secondary-container text-on-secondary-container hover:bg-secondary-fixed transition-colors px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs font-semibold" type="button">
+          <span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+          <span class="hidden md:inline">Incident Monitoring Active</span>
+          <span class="md:hidden">Live</span>
+        </button>
+
+        <!-- Notifications Dropdown Trigger -->
+        <div class="relative">
+          <button id="notifications-btn" aria-label="Notifications" class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container p-2 rounded-full transition-colors flex items-center justify-center relative" type="button">
+            <span class="material-symbols-outlined text-[22px]">notifications</span>
+            <span id="notif-badge" class="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full ring-2 ring-surface"></span>
+          </button>
+
+          <!-- Notifications Popup Menu -->
+          <div id="notifications-menu" class="hidden absolute right-0 mt-2 w-80 bg-surface-container-lowest rounded-xl shadow-xl border border-surface-container p-3 z-50 space-y-2">
+            <div class="flex items-center justify-between border-b border-surface-container pb-2">
+              <span class="text-xs font-bold text-on-surface uppercase tracking-wider">Campus Alerts</span>
+              <span class="text-[11px] text-primary cursor-pointer hover:underline" onclick="clearNotifications()">Clear all</span>
+            </div>
+            <div id="notifications-list" class="space-y-1.5 max-h-60 overflow-y-auto">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <!-- User Profile Pill -->
+        <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center cursor-pointer shadow-sm" onclick="toggleRoleSwitch()" title="Toggle Role">
+          <span class="material-symbols-outlined text-on-primary text-[18px]">person</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN BODY CONTENT -->
+    <main class="relative pt-16 bg-background flex-1">
+      
+      <!-- ==================================================================== -->
+      <!-- VIEW 1: STUDENT REPORT ISSUE & AI DIAGNOSIS                          -->
+      <!-- ==================================================================== -->
+      <section id="view-report-issue" class="view-panel hidden">
+        <div class="px-space-md lg:px-margin-lg py-space-xl max-w-7xl mx-auto w-full">
+          <!-- Top Action Breadcrumb & Title Section -->
+          <div class="flex flex-col gap-space-sm mb-space-xl">
+            <div class="flex items-center gap-space-xs text-xs text-on-surface-variant">
+              <span>CampusCare</span>
+              <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+              <span>Student Services</span>
+              <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+              <span class="text-primary font-semibold">Incident Intake</span>
+            </div>
+            <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-space-md">
+              <div>
+                <h1 class="text-2xl sm:text-3xl font-bold text-on-surface tracking-tight">Report a Campus Issue</h1>
+                <p class="text-sm sm:text-base text-on-surface-variant mt-1 max-w-2xl">
+                  Snap a photo and let CampusCare AI identify the problem, department, and priority for you in seconds.
+                </p>
+              </div>
+              <!-- 3-Step Civic Intake Flow -->
+              <div class="bg-surface-container-low p-1.5 rounded-xl shadow-sm flex items-center gap-1 self-start lg:self-auto">
+                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-container text-on-primary-container shadow-xs text-xs font-semibold">
+                  <span class="w-5 h-5 rounded-full bg-surface-container-lowest text-primary flex items-center justify-center font-bold">1</span>
+                  <span>Upload &amp; AI</span>
+                </div>
+                <span class="material-symbols-outlined text-outline-variant text-[16px]">arrow_forward</span>
+                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-on-surface-variant text-xs font-semibold">
+                  <span class="w-5 h-5 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center font-bold">2</span>
+                  <span>Location</span>
+                </div>
+                <span class="material-symbols-outlined text-outline-variant text-[16px]">arrow_forward</span>
+                <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-on-surface-variant text-xs font-semibold">
+                  <span class="w-5 h-5 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center font-bold">3</span>
+                  <span>Review</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Main Two-Column Interactive Workspace -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter-lg items-start">
+            
+            <!-- LEFT COLUMN: Photo Upload, Capture, & Emergency Triaging (5 cols) -->
+            <div class="lg:col-span-5 flex flex-col gap-space-lg">
+              
+              <!-- Photo Upload & Camera Card -->
+              <div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col">
+                <div class="flex items-center justify-between mb-space-md">
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary text-[22px]">photo_camera</span>
+                    <span class="text-lg text-on-surface font-semibold">Incident Snapshot</span>
+                  </div>
+                  <span id="ai-vision-pill" class="text-xs bg-secondary-container text-on-secondary-container px-2.5 py-1 rounded-full font-semibold flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                    AI Vision Ready
+                  </span>
+                </div>
+
+                <!-- Preview Frame with Buttermilk tinted border/fill -->
+                <div class="relative w-full rounded-xl overflow-hidden bg-surface-container p-2">
+                  <div id="image-dropzone" class="relative w-full h-72 rounded-lg overflow-hidden bg-surface-container-highest shadow-inner flex items-center justify-center border-2 border-dashed border-outline-variant/60 hover:border-primary transition-all cursor-pointer">
+                    <!-- Default State when no image selected -->
+                    <div id="preview-placeholder" class="flex flex-col items-center justify-center p-6 text-center text-on-surface-variant space-y-2">
+                      <div class="w-14 h-14 rounded-full bg-surface-container-lowest text-primary flex items-center justify-center shadow-sm">
+                        <span class="material-symbols-outlined text-[32px]">add_photo_alternate</span>
+                      </div>
+                      <span class="text-sm font-semibold text-on-surface">Click or Drag Image Here</span>
+                      <p class="text-xs text-on-surface-variant max-w-xs">Supports JPG, PNG, WEBP from your device or browser camera</p>
+                    </div>
+
+                    <!-- Active Image Preview Tag -->
+                    <img id="image-preview" class="w-full h-full object-cover hidden" alt="Selected incident photo"/>
+
+                    <!-- AI Focus Bounding Overlay Box -->
+                    <div id="ai-bounding-box" class="absolute inset-8 rounded-lg pointer-events-none flex flex-col justify-between p-2 hidden">
+                      <div class="flex items-center justify-between">
+                        <span class="bg-primary/90 text-on-primary backdrop-blur-sm text-xs font-semibold px-2 py-0.5 rounded shadow-sm flex items-center gap-1">
+                          <span class="material-symbols-outlined text-[13px]">center_focus_strong</span>
+                          HAZARD ZONE #1
+                        </span>
+                        <span id="confidence-match-badge" class="bg-surface-container-lowest/90 text-on-surface text-xs font-semibold px-1.5 py-0.5 rounded shadow-sm">
+                          96.4% match
+                        </span>
+                      </div>
+                      <div id="bounding-label" class="self-end bg-secondary-container/95 text-on-secondary-container text-xs font-semibold px-2 py-1 rounded shadow-sm flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[14px]">bolt</span>
+                        <span id="bounding-label-text">Feature Target</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Image Metadata Strip -->
+                  <div id="image-meta-strip" class="mt-2 px-2 py-1.5 bg-surface-container-low rounded-lg flex items-center justify-between hidden">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span class="material-symbols-outlined text-primary text-[18px]">attachment</span>
+                      <span id="meta-filename" class="text-xs text-on-surface font-medium truncate">incident_photo.jpg</span>
+                      <span id="meta-filesize" class="text-xs text-on-surface-variant font-medium">(2.4 MB)</span>
+                    </div>
+                    <button onclick="removeSelectedImage()" class="text-on-surface-variant hover:text-error text-xs flex items-center" title="Remove photo">
+                      <span class="material-symbols-outlined text-[18px]">close</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Hidden Native File Input -->
+                <input type="file" id="ticket-file-input" accept="image/*" class="hidden"/>
+
+                <!-- Action Controls for Camera/Upload -->
+                <div class="grid grid-cols-2 gap-space-sm mt-space-md">
+                  <button id="open-camera-btn" onclick="openCameraModal()" class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors text-xs sm:text-sm font-semibold" type="button">
+                    <span class="material-symbols-outlined text-[18px]">photo_camera</span>
+                    <span>Use Camera</span>
+                  </button>
+                  <button id="choose-file-btn" onclick="document.getElementById('ticket-file-input').click()" class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-surface-container text-on-surface hover:bg-surface-container-high transition-colors text-xs sm:text-sm font-semibold" type="button">
+                    <span class="material-symbols-outlined text-[18px]">file_upload</span>
+                    <span id="upload-btn-label">Upload Photo</span>
+                  </button>
+                </div>
+
+                <!-- Primary Trigger Button -->
+                <button class="mt-space-md w-full bg-primary-container text-on-primary-container hover:bg-primary-fixed-dim transition-all py-3 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm" id="reanalyze-btn" onclick="triggerAiDiagnosis()" type="button">
+                  <span class="material-symbols-outlined text-[20px]">auto_fix_high</span>
+                  <span id="analyze-btn-text">Analyze Issue with AI</span>
+                </button>
+
+                <!-- AI Notice / Error message container -->
+                <div id="ai-status-message" class="hidden mt-3 p-3 rounded-xl text-xs font-medium"></div>
+              </div>
+
+              <!-- Severe Emergency Hazard Warning Banner -->
+              <div id="emergency-banner" class="bg-error-container text-on-error-container rounded-xl p-space-lg shadow-sm flex flex-col gap-space-sm hidden">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-error text-on-error flex items-center justify-center shrink-0">
+                      <span class="material-symbols-outlined text-[20px]">warning</span>
+                    </div>
+                    <div>
+                      <span class="text-xs uppercase tracking-wider font-bold text-error">Severe Safety Alert</span>
+                      <h3 class="text-base font-bold leading-tight">EMERGENCY HAZARD DETECTED</h3>
+                    </div>
+                  </div>
+                  <span class="bg-error text-on-error text-xs px-2.5 py-1 rounded-full font-bold shadow-sm">CRITICAL</span>
+                </div>
+                <p class="text-sm text-on-error-container">
+                  Exposed dangerous wiring, fire, sparks, or severe flooding detected. This physical hazard may require immediate campus security intervention or immediate area lockdown.
+                </p>
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-space-sm mt-1">
+                  <a id="security-call-link" class="flex-1 bg-error text-on-error hover:opacity-95 transition-opacity px-4 py-2.5 rounded-lg text-xs font-semibold text-center flex items-center justify-center gap-2 shadow-sm" href="#">
+                    <span class="material-symbols-outlined text-[18px]">call</span>
+                    <span id="security-call-text">Campus Security (Ext: 555-0199)</span>
+                  </a>
+                  <button onclick="dismissEmergencyBanner()" class="bg-surface-container-lowest/80 text-on-surface hover:bg-surface-container-lowest transition-colors px-3 py-2.5 rounded-lg text-xs text-center" type="button">
+                    Continue Ticket
+                  </button>
+                </div>
+              </div>
+
+              <!-- Campus Safety Hotline Quick Reference -->
+              <div class="bg-secondary-container/40 p-space-md rounded-xl flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="material-symbols-outlined text-secondary text-[22px]">health_and_safety</span>
+                  <div class="flex flex-col">
+                    <span class="text-xs font-semibold text-on-surface">Block C Resident Advisor</span>
+                    <span class="text-[11px] text-on-surface-variant">On-Duty: Jordan Vance (Rm 102)</span>
+                  </div>
+                </div>
+                <button onclick="showQuickAlert('Duty Desk notified. Jordan Vance has been pinged for Block C.')" class="bg-secondary-container hover:bg-secondary-fixed text-on-secondary-container text-xs px-3 py-1.5 rounded-lg transition-colors font-semibold" type="button">
+                  Ring Duty Desk
+                </button>
+              </div>
+            </div>
+
+            <!-- RIGHT COLUMN: AI Live Diagnosis, Triage Form, Duplicate Stacking (7 cols) -->
+            <div class="lg:col-span-7 flex flex-col gap-space-lg">
+              
+              <!-- Live AI Analysis Findings Card -->
+              <div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+                <!-- Diagnosis Header & Confidence Metric -->
+                <div class="flex flex-wrap items-center justify-between gap-space-sm pb-space-sm bg-surface-container-low p-space-md rounded-xl">
+                  <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-primary-container text-on-primary-container flex items-center justify-center">
+                      <span class="material-symbols-outlined text-[20px]">psychology</span>
+                    </div>
+                    <div>
+                      <h2 class="text-base font-bold text-on-surface">AI Issue Analysis</h2>
+                      <span id="ai-timestamp-label" class="text-xs text-on-surface-variant">Intelligent Campus Diagnostic System</span>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <div class="flex flex-col items-end">
+                      <span class="text-xs text-on-surface-variant font-medium">Confidence Score</span>
+                      <span id="confidence-percentage" class="text-sm font-bold text-primary">96.4% Accuracy</span>
+                    </div>
+                    <div class="w-9 h-9 rounded-full bg-primary-container/40 flex items-center justify-center text-primary">
+                      <svg class="w-7 h-7 transform -rotate-90" viewBox="0 0 36 36">
+                        <path class="text-surface-container" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3.5"></path>
+                        <path class="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="96, 100" stroke-linecap="round" stroke-width="3.5"></path>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Structured Key-Value Findings -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-space-sm">
+                  <!-- Detected Issue Title -->
+                  <div class="md:col-span-2 p-space-md rounded-xl bg-surface-container-low flex items-start gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-surface-container-lowest text-primary flex items-center justify-center shrink-0 shadow-xs">
+                      <span class="material-symbols-outlined text-[20px]">report_problem</span>
+                    </div>
+                    <div class="flex flex-col flex-1">
+                      <span class="text-xs text-on-surface-variant font-medium uppercase tracking-wider">Identified Problem</span>
+                      <input id="input-issue" class="font-semibold text-on-surface mt-0.5 bg-transparent border-b border-transparent hover:border-outline-variant focus:border-primary focus:outline-none py-0.5 text-base" type="text" value="Broken electrical panel with loose terminal wiring" placeholder="Describe the maintenance defect..."/>
+                    </div>
+                  </div>
+
+                  <!-- Category -->
+                  <div class="p-space-md rounded-xl bg-surface-container-low flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-surface-container-lowest text-primary flex items-center justify-center shrink-0 shadow-xs">
+                        <span class="material-symbols-outlined text-[18px]">bolt</span>
+                      </div>
+                      <div class="flex flex-col">
+                        <span class="text-xs text-on-surface-variant font-medium">Category</span>
+                        <span id="category-subtitle" class="text-xs font-semibold text-on-surface">Power &amp; Utilities</span>
+                      </div>
+                    </div>
+                    <select id="select-category" onchange="onCategoryChanged()" class="bg-primary-container text-on-primary-container px-3 py-1 rounded-full text-xs font-semibold shadow-xs focus:outline-none cursor-pointer">
+                      <option value="Electrical" selected>Electrical</option>
+                      <option value="Plumbing">Plumbing</option>
+                      <option value="Furniture">Furniture</option>
+                      <option value="Civil">Civil</option>
+                      <option value="IT/Network">IT/Network</option>
+                      <option value="Sanitation">Sanitation</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <!-- Priority -->
+                  <div class="p-space-md rounded-xl bg-surface-container-low flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-surface-container-lowest text-error flex items-center justify-center shrink-0 shadow-xs">
+                        <span class="material-symbols-outlined text-[18px]">priority_high</span>
+                      </div>
+                      <div class="flex flex-col">
+                        <span class="text-xs text-on-surface-variant font-medium">Priority Tier</span>
+                        <span id="priority-subtitle" class="text-xs font-semibold text-on-surface">Urgent Dispatch</span>
+                      </div>
+                    </div>
+                    <select id="select-priority" onchange="onPriorityChanged()" class="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full text-xs font-bold tracking-wider shadow-xs focus:outline-none cursor-pointer">
+                      <option value="CRITICAL">CRITICAL</option>
+                      <option value="HIGH" selected>HIGH</option>
+                      <option value="MEDIUM">MEDIUM</option>
+                      <option value="LOW">LOW</option>
+                    </select>
+                  </div>
+
+                  <!-- Responsible Department -->
+                  <div class="md:col-span-2 p-space-md rounded-xl bg-surface-container-low flex items-start gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-surface-container-lowest text-primary flex items-center justify-center shrink-0 shadow-xs">
+                      <span class="material-symbols-outlined text-[20px]">engineering</span>
+                    </div>
+                    <div class="flex flex-col flex-1">
+                      <span class="text-xs text-on-surface-variant font-medium uppercase tracking-wider">Assigned Department</span>
+                      <input id="input-department" class="text-sm font-semibold text-on-surface mt-0.5 bg-transparent border-b border-transparent hover:border-outline-variant focus:border-primary focus:outline-none py-0.5" type="text" value="Electrical Maintenance &amp; Grid Infrastructure Team"/>
+                    </div>
+                  </div>
+
+                  <!-- Suggested Fix -->
+                  <div class="md:col-span-2 p-space-md rounded-xl bg-surface-container-low flex items-start gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-surface-container-lowest text-secondary flex items-center justify-center shrink-0 shadow-xs">
+                      <span class="material-symbols-outlined text-[20px]">build_circle</span>
+                    </div>
+                    <div class="flex flex-col flex-1">
+                      <span class="text-xs text-on-surface-variant font-medium uppercase tracking-wider">Recommended Action Protocol</span>
+                      <textarea id="input-suggested-fix" rows="2" class="text-sm text-on-surface mt-0.5 bg-transparent border border-transparent hover:border-outline-variant focus:border-primary focus:outline-none rounded p-1 resize-none">Inspect the electrical panel, secure safety isolation, and replace damaged terminal components. Test live load stability prior to clearing.</textarea>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Quality Verification Strip -->
+                <div class="flex items-center justify-between pt-1">
+                  <span class="text-xs text-on-surface-variant">Does this look accurate? You can adjust fields directly.</span>
+                  <div class="flex items-center gap-2">
+                    <button onclick="document.getElementById('input-issue').focus()" class="px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold transition-colors flex items-center gap-1" type="button">
+                      <span class="material-symbols-outlined text-[16px]">edit</span>
+                      <span>Edit Details</span>
+                    </button>
+                    <button onclick="triggerAiDiagnosis()" class="px-3 py-1.5 rounded-lg bg-primary-container text-on-primary-container hover:bg-primary-fixed-dim text-xs font-semibold transition-colors flex items-center gap-1" type="button">
+                      <span class="material-symbols-outlined text-[16px]">refresh</span>
+                      <span>Analyze Again</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Student Location & Contextual Input Card -->
+              <div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col gap-space-md">
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-primary text-[22px]">location_on</span>
+                  <h3 class="text-base font-semibold text-on-surface">Campus Location &amp; Verification</h3>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+                  <!-- Block Picker -->
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-xs font-semibold text-on-surface" for="block-select">Residential Block / Facility</label>
+                    <div class="relative">
+                      <select id="block-select" onchange="checkDuplicateLive()" class="w-full bg-surface-container-low text-on-surface text-sm px-3.5 py-2.5 rounded-lg appearance-none cursor-pointer pr-10 focus:outline-none focus:bg-surface-container">
+                        <option value="Block A">Block A (Undergraduate Hall)</option>
+                        <option value="Block B">Block B (STEM Residence)</option>
+                        <option value="Block C" selected>Block C (Senior Suites &amp; Labs)</option>
+                        <option value="Block D">Block D (Dining &amp; Commons)</option>
+                        <option value="Block E">Block E (Library &amp; Media Center)</option>
+                      </select>
+                      <span class="material-symbols-outlined absolute right-3 top-2.5 text-on-surface-variant pointer-events-none text-[20px]">
+                        unfold_more
+                      </span>
+                    </div>
+                  </div>
+                  <!-- Room / Space Input -->
+                  <div class="flex flex-col gap-1.5">
+                    <label class="text-xs font-semibold text-on-surface" for="room-input">Specific Room / Corridor Area</label>
+                    <input id="room-input" oninput="checkDuplicateLive()" class="w-full bg-surface-container-low text-on-surface text-sm px-3.5 py-2.5 rounded-lg focus:outline-none focus:bg-surface-container placeholder:text-outline" placeholder="Enter room number e.g. 204" type="text" value="204"/>
+                  </div>
+                </div>
+                <!-- Additional Notes Textarea -->
+                <div class="flex flex-col gap-1.5">
+                  <div class="flex items-center justify-between">
+                    <label class="text-xs font-semibold text-on-surface" for="notes-input">Observations &amp; Sound/Smell Markers</label>
+                    <span class="text-xs text-on-surface-variant">Optional</span>
+                  </div>
+                  <textarea class="w-full bg-surface-container-low text-on-surface text-sm p-3.5 rounded-lg focus:outline-none focus:bg-surface-container placeholder:text-outline resize-none" id="notes-input" placeholder="Provide any auditory or olfactory observations (e.g. burning odor, continuous buzzing, water dripping)..." rows="2">Sparking sound heard when activating classroom switch. Plastic switch plate feels warm to touch.</textarea>
+                </div>
+              </div>
+
+              <!-- Duplicate Notice & Automated Ticket Merging Card -->
+              <div id="duplicate-indicator-card" class="bg-secondary-container/40 p-space-md rounded-xl flex items-start gap-space-sm shadow-xs">
+                <div class="w-8 h-8 rounded-lg bg-secondary-container text-on-secondary-container flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-[20px]">dynamic_feed</span>
+                </div>
+                <div class="flex-1 flex flex-col">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-on-surface">Smart Incident Merging</span>
+                    <span class="bg-primary-container text-on-primary-container px-2 py-0.2 rounded-full text-[10px] font-semibold">Active Sync</span>
+                  </div>
+                  <p id="duplicate-indicator-text" class="text-xs text-on-surface mt-1">
+                    Checking campus records for matching open tickets in this room and category...
+                  </p>
+                </div>
+              </div>
+
+              <!-- Submission Trigger & SLA Notice -->
+              <div class="flex flex-col sm:flex-row items-center justify-between gap-space-md p-space-md bg-surface-container-low rounded-xl">
+                <div class="flex items-center gap-2.5">
+                  <span class="material-symbols-outlined text-primary text-[24px]">timer</span>
+                  <div class="flex flex-col">
+                    <span class="text-xs uppercase tracking-wider text-on-surface-variant font-bold">Standard Resolution SLA</span>
+                    <span class="text-xs font-semibold text-on-surface">Estimated response time: &lt; 2 hours for High/Critical tickets.</span>
+                  </div>
+                </div>
+                <button class="w-full sm:w-auto bg-primary-container text-on-primary-container hover:bg-primary-fixed-dim transition-all text-sm font-bold px-8 py-3.5 rounded-xl shadow-md flex items-center justify-center gap-2 shrink-0 active:scale-[0.98]" id="submit-ticket-btn" onclick="submitReportTicket()" type="button">
+                  <span id="submit-ticket-label">Submit Ticket</span>
+                  <span class="material-symbols-outlined text-[20px]">send</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================== -->
+      <!-- VIEW 2: STUDENT MY REPORTS & TICKET TRACKER                         -->
+      <!-- ==================================================================== -->
+      <section id="view-my-reports" class="view-panel hidden">
+        <div class="flex flex-col w-full px-space-lg lg:px-margin-lg py-space-xl max-w-7xl mx-auto space-y-space-xl">
+          <!-- Top Level Action Header -->
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+            <div class="space-y-1">
+              <div class="flex items-center gap-space-sm">
+                <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container">
+                  <span class="material-symbols-outlined text-[18px]">receipt_long</span>
+                </span>
+                <h1 class="text-2xl sm:text-3xl font-bold text-on-surface tracking-tight">My Reports</h1>
+              </div>
+              <p class="text-sm text-on-surface-variant max-w-xl">
+                Track real-time maintenance updates, verify campus triage status, and monitor resolution timelines across your dorms and study blocks.
+              </p>
+            </div>
+            <div class="flex items-center gap-space-sm">
+              <button onclick="navigateTo('report-issue')" class="group inline-flex items-center gap-2 bg-primary-container hover:bg-primary-fixed-dim text-on-primary-container text-sm font-bold px-5 py-3 rounded-xl shadow-sm transition-all duration-200 active:scale-95" type="button">
+                <span class="material-symbols-outlined text-[20px] transition-transform group-hover:rotate-90">add</span>
+                <span>Report New Issue</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Key Metrics 4-Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-space-md">
+            <!-- Metric 1: Total Reports -->
+            <div class="relative overflow-hidden bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm hover:shadow-md transition-shadow">
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-on-surface-variant font-semibold">Total Reports</span>
+                <span class="p-2 rounded-xl bg-surface-container text-on-surface-variant">
+                  <span class="material-symbols-outlined text-[20px]">assignment</span>
+                </span>
+              </div>
+              <div class="mt-space-md flex items-baseline gap-space-sm">
+                <span id="my-metric-total" class="text-3xl font-bold text-on-surface">--</span>
+                <span class="text-xs text-primary font-medium">Logged semester</span>
+              </div>
+              <div class="mt-2 flex items-center gap-1.5 text-on-surface-variant text-xs">
+                <span class="inline-block w-2 h-2 rounded-full bg-primary-container"></span>
+                <span>Across all campus zones</span>
+              </div>
+            </div>
+
+            <!-- Metric 2: Open Tickets -->
+            <div class="relative overflow-hidden bg-secondary-container/60 rounded-2xl p-space-lg shadow-sm hover:shadow-md transition-shadow">
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-on-secondary-fixed-variant font-semibold">Open Tickets</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-secondary-fixed text-on-secondary-fixed">
+                  Action Pending
+                </span>
+              </div>
+              <div class="mt-space-md flex items-baseline gap-space-sm">
+                <span id="my-metric-open" class="text-3xl font-bold text-on-surface">--</span>
+                <span id="my-metric-critical-sub" class="text-xs text-secondary font-medium">-- critical urgent</span>
+              </div>
+              <div class="mt-2 flex items-center gap-1.5 text-on-surface-variant text-xs">
+                <span class="inline-block w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+                <span>Active facilities dispatch</span>
+              </div>
+            </div>
+
+            <!-- Metric 3: In Progress / Assigned -->
+            <div class="relative overflow-hidden bg-primary-fixed/40 rounded-2xl p-space-lg shadow-sm hover:shadow-md transition-shadow">
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-on-primary-fixed-variant font-semibold">In Progress</span>
+                <span class="p-2 rounded-xl bg-primary-container/40 text-on-primary-container">
+                  <span class="material-symbols-outlined text-[20px]">engineering</span>
+                </span>
+              </div>
+              <div class="mt-space-md flex items-baseline gap-space-sm">
+                <span id="my-metric-assigned" class="text-3xl font-bold text-on-surface">--</span>
+                <span class="text-xs text-primary font-medium">Staff active</span>
+              </div>
+              <div class="mt-2 flex items-center gap-1.5 text-on-surface-variant text-xs">
+                <span class="material-symbols-outlined text-[14px] text-primary">schedule</span>
+                <span>Fast-track response</span>
+              </div>
+            </div>
+
+            <!-- Metric 4: Fixed & Resolved -->
+            <div class="relative overflow-hidden bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm hover:shadow-md transition-shadow">
+              <div class="flex items-center justify-between">
+                <span class="text-xs uppercase tracking-wider text-on-surface-variant font-semibold">Fixed &amp; Resolved</span>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-tertiary-fixed text-on-tertiary-fixed-variant">
+                  Verified
+                </span>
+              </div>
+              <div class="mt-space-md flex items-baseline gap-space-sm">
+                <span id="my-metric-fixed" class="text-3xl font-bold text-on-surface">--</span>
+                <span class="text-xs text-tertiary font-medium">Closed records</span>
+              </div>
+              <div class="mt-2 flex items-center gap-1.5 text-on-surface-variant text-xs">
+                <span class="material-symbols-outlined text-[15px] text-primary">check_circle</span>
+                <span id="my-metric-sla-sub">High resolution rate</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Search & Filter Controls Surface -->
+          <div class="bg-surface-container-low rounded-2xl p-space-md shadow-sm">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-space-sm items-center">
+              <!-- Search Input -->
+              <div class="md:col-span-5 relative">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+                <input id="my-ticket-search" oninput="filterMyReports()" class="w-full bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant text-sm pl-10 pr-4 py-2.5 rounded-xl shadow-sm focus:outline-none focus:bg-surface-bright transition-all" placeholder="Search by ticket ID, issue title, or room..." type="text"/>
+              </div>
+              <!-- Filter: Status -->
+              <div class="md:col-span-2 relative">
+                <select id="my-status-filter" onchange="filterMyReports()" class="w-full appearance-none bg-surface-container-lowest text-on-surface text-sm px-3.5 py-2.5 rounded-xl shadow-sm cursor-pointer focus:outline-none pr-8">
+                  <option value="All">All Statuses</option>
+                  <option value="Reported">Reported</option>
+                  <option value="Assigned">Assigned</option>
+                  <option value="Fixed">Fixed</option>
+                </select>
+                <span class="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant text-[20px]">expand_more</span>
+              </div>
+              <!-- Filter: Category -->
+              <div class="md:col-span-3 relative">
+                <select id="my-category-filter" onchange="filterMyReports()" class="w-full appearance-none bg-surface-container-lowest text-on-surface text-sm px-3.5 py-2.5 rounded-xl shadow-sm cursor-pointer focus:outline-none pr-8">
+                  <option value="All">All Categories</option>
+                  <option value="Electrical">Electrical</option>
+                  <option value="Plumbing">Plumbing</option>
+                  <option value="Furniture">Furniture</option>
+                  <option value="Civil">Civil</option>
+                  <option value="IT/Network">IT/Network</option>
+                  <option value="Sanitation">Sanitation</option>
+                  <option value="Other">Other</option>
+                </select>
+                <span class="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant text-[20px]">expand_more</span>
+              </div>
+              <!-- Sort Selection -->
+              <div class="md:col-span-2 relative">
+                <select id="my-sort-filter" onchange="filterMyReports()" class="w-full appearance-none bg-surface-container-lowest text-on-surface text-sm px-3.5 py-2.5 rounded-xl shadow-sm cursor-pointer focus:outline-none pr-8">
+                  <option value="priority">Priority First</option>
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="reports">Most Reports</option>
+                </select>
+                <span class="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant text-[20px]">sort</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Operational Health split ribbon -->
+          <div class="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm flex flex-col md:flex-row items-center justify-between gap-space-md">
+            <div class="flex items-center gap-space-sm min-w-0">
+              <span class="material-symbols-outlined text-secondary text-[22px]">health_and_safety</span>
+              <div class="truncate">
+                <p class="text-sm font-semibold text-on-surface">Campus Facilities Operational SLA</p>
+                <p id="sla-subtext" class="text-xs text-on-surface-variant">Live maintenance queue active across student dorms &amp; academic blocks</p>
+              </div>
+            </div>
+            <!-- Mini Progress Ribbon -->
+            <div class="w-full md:w-72 flex flex-col gap-1">
+              <div class="h-2.5 w-full bg-surface-container rounded-full overflow-hidden flex" id="sla-progress-bar">
+                <div id="sla-bar-fixed" class="h-full bg-primary" style="width: 50%;" title="Resolved"></div>
+                <div id="sla-bar-assigned" class="h-full bg-primary-container" style="width: 25%;" title="Assigned"></div>
+                <div id="sla-bar-reported" class="h-full bg-secondary" style="width: 25%;" title="Reported"></div>
+              </div>
+              <div class="flex justify-between text-[11px] text-on-surface-variant px-0.5 font-medium">
+                <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-primary"></span>Fixed</span>
+                <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>Assigned</span>
+                <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>Reported</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Main Content Layout: Tickets Feed and Sticky Details Drawer -->
+          <div class="grid grid-cols-1 xl:grid-cols-12 gap-space-lg items-start">
+            <!-- Tickets List Area (7 cols on XL) -->
+            <div class="xl:col-span-7 flex flex-col space-y-space-md" id="my-tickets-container">
+              <!-- Dynamically populated ticket cards -->
+            </div>
+
+            <!-- Live Ticket Detail Preview Panel (5 cols on XL, sticky) -->
+            <div class="xl:col-span-5 sticky top-20 flex flex-col space-y-space-md">
+              <div id="ticket-detail-panel" class="bg-surface-container-lowest rounded-2xl p-space-lg shadow-md space-y-space-lg relative overflow-hidden">
+                <!-- Fallback when no ticket selected -->
+                <div id="detail-empty-state" class="p-8 text-center text-on-surface-variant">
+                  <span class="material-symbols-outlined text-4xl text-outline-variant mb-2">touch_app</span>
+                  <p class="text-sm font-medium">Select any ticket to view live dispatch timeline and details.</p>
+                </div>
+
+                <!-- Active Ticket Detail Content -->
+                <div id="detail-active-content" class="hidden space-y-space-lg">
+                  <!-- Context Banner -->
+                  <div class="flex items-center justify-between pb-space-sm border-b border-surface-container-high/60">
+                    <div class="flex items-center gap-space-xs">
+                      <span class="px-2 py-0.5 rounded-md bg-secondary-container text-on-secondary-container text-xs font-bold">Active Live Feed</span>
+                      <span id="detail-ticket-id" class="text-xs text-on-surface-variant">Ticket #1028</span>
+                    </div>
+                    <button onclick="copyTicketShareLink()" aria-label="Share ticket details" class="text-on-surface-variant hover:text-on-surface p-1 rounded-lg hover:bg-surface-container" type="button">
+                      <span class="material-symbols-outlined text-[18px]">share</span>
+                    </button>
+                  </div>
+
+                  <!-- Issue Title & Meta -->
+                  <div>
+                    <span id="detail-severity-tag" class="text-xs uppercase tracking-wider font-bold flex items-center gap-1 mb-1 text-error">
+                      <span class="material-symbols-outlined text-[16px]">warning</span>
+                      <span id="detail-severity-text">HIGH PRIORITY</span>
+                    </span>
+                    <h3 id="detail-issue-title" class="text-xl font-bold text-on-surface">Electrical panel sparking</h3>
+                    <p id="detail-location-text" class="mt-1 text-xs text-on-surface-variant">Location: Block C — Floor 2, Room 204</p>
+                    <p id="detail-department-text" class="mt-0.5 text-xs text-primary font-medium">Assigned Department: Electrical Maintenance</p>
+                  </div>
+
+                  <!-- Suggested Fix -->
+                  <div class="p-3 bg-surface-container-low rounded-xl">
+                    <span class="text-[11px] uppercase tracking-wider text-on-surface-variant font-bold">Action Protocol</span>
+                    <p id="detail-suggested-fix" class="text-xs text-on-surface mt-0.5">Inspect wiring and replace damaged contacts.</p>
+                  </div>
+
+                  <!-- Live Maintenance Timeline -->
+                  <div class="space-y-space-md">
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-bold text-on-surface uppercase tracking-wider">Triage &amp; Action Timeline</span>
+                      <span id="detail-status-pill" class="text-xs text-primary font-semibold">In Progress</span>
+                    </div>
+
+                    <div class="relative pl-6 space-y-space-md before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-container-high">
+                      <!-- Step 1: Created -->
+                      <div class="relative">
+                        <span class="absolute -left-6 top-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center text-white ring-4 ring-surface-container-lowest">
+                          <span class="material-symbols-outlined text-[10px]">check</span>
+                        </span>
+                        <div>
+                          <p class="text-xs font-semibold text-on-surface">Report Submitted</p>
+                          <p id="timeline-created-at" class="text-[11px] text-on-surface-variant">Timestamp</p>
+                        </div>
+                      </div>
+
+                      <!-- Step 2: Categorized -->
+                      <div class="relative">
+                        <span class="absolute -left-6 top-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center text-white ring-4 ring-surface-container-lowest">
+                          <span class="material-symbols-outlined text-[10px]">check</span>
+                        </span>
+                        <div>
+                          <p class="text-xs font-semibold text-on-surface">AI Categorized &amp; Prioritized</p>
+                          <p id="timeline-category-note" class="text-[11px] text-on-surface-variant">Routed to appropriate engineering department</p>
+                        </div>
+                      </div>
+
+                      <!-- Step 3: Assigned -->
+                      <div class="relative">
+                        <span id="timeline-step3-dot" class="absolute -left-6 top-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center text-white ring-4 ring-surface-container-lowest">
+                          <span class="material-symbols-outlined text-[10px]">check</span>
+                        </span>
+                        <div>
+                          <p class="text-xs font-semibold text-on-surface">Campus Facilities Ops Acknowledged</p>
+                          <p id="timeline-assigned-note" class="text-[11px] text-on-surface-variant">Engineer dispatched</p>
+                        </div>
+                      </div>
+
+                      <!-- Step 4: Fixed -->
+                      <div class="relative">
+                        <span id="timeline-step4-dot" class="absolute -left-6 top-1 w-4 h-4 rounded-full bg-secondary ring-4 ring-surface-container-lowest"></span>
+                        <div id="timeline-step4-card" class="bg-secondary-container/40 p-2.5 rounded-xl">
+                          <p id="timeline-step4-title" class="text-xs font-bold text-on-surface">Resolution pending</p>
+                          <p id="timeline-step4-note" class="text-[11px] text-on-surface-variant mt-0.5">Technicians working to clear incident.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Resolution Feedback prompt for Resolved tickets -->
+                  <div id="review-feedback-widget" class="bg-surface-container rounded-xl p-space-md space-y-2 hidden">
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-bold text-on-surface">Rate Past Resolution</span>
+                      <span id="review-ticket-id" class="text-xs text-tertiary font-semibold">Ticket #</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant">How satisfied were you with the maintenance turnaround and repair quality?</p>
+                    <div class="flex items-center justify-between pt-1">
+                      <div class="flex items-center gap-1 text-secondary" id="star-rating">
+                        <button type="button" class="star-btn hover:scale-125 transition-transform" data-rating="1"><span class="material-symbols-outlined text-[20px]">star</span></button>
+                        <button type="button" class="star-btn hover:scale-125 transition-transform" data-rating="2"><span class="material-symbols-outlined text-[20px]">star</span></button>
+                        <button type="button" class="star-btn hover:scale-125 transition-transform" data-rating="3"><span class="material-symbols-outlined text-[20px]">star</span></button>
+                        <button type="button" class="star-btn hover:scale-125 transition-transform" data-rating="4"><span class="material-symbols-outlined text-[20px]">star</span></button>
+                        <button type="button" class="star-btn hover:scale-125 transition-transform" data-rating="5"><span class="material-symbols-outlined text-[20px]">star</span></button>
+                      </div>
+                      <button onclick="submitTicketReview()" class="px-3 py-1 bg-surface-container-lowest text-on-surface text-xs font-semibold rounded-lg shadow-sm hover:bg-surface-bright" type="button">
+                        Submit Review
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Campus Help banner card -->
+              <div class="bg-primary-fixed/30 rounded-2xl p-space-md flex items-center justify-between shadow-sm">
+                <div class="flex items-center gap-space-sm">
+                  <span class="p-2 rounded-xl bg-primary-container text-on-primary-container">
+                    <span class="material-symbols-outlined text-[20px]">support_agent</span>
+                  </span>
+                  <div>
+                    <p class="text-xs font-bold text-on-surface">Need Immediate Assistance?</p>
+                    <p class="text-[11px] text-on-surface-variant">Emergency facilities operations desk</p>
+                  </div>
+                </div>
+                <button onclick="showQuickAlert('Connecting to Campus Facilities Helpdesk... (Ext: 4400)')" class="px-3 py-1.5 rounded-lg bg-surface-container-lowest text-primary text-xs font-bold hover:shadow-sm" type="button">
+                  Call Ext. 4400
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================== -->
+      <!-- VIEW 3: ADMIN MAINTENANCE DASHBOARD & HOTSPOTS                       -->
+      <!-- ==================================================================== -->
+      <section id="view-maintenance-dashboard" class="view-panel hidden">
+        <div class="flex flex-col w-full px-space-lg lg:px-margin-lg py-space-xl space-y-space-xl">
+          <!-- Top Operational Header Bar -->
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md">
+            <div class="space-y-1">
+              <div class="flex items-center gap-space-xs text-on-surface-variant text-xs uppercase tracking-wider">
+                <span class="w-2 h-2 rounded-full bg-primary"></span>
+                <span>Facilities &amp; Infrastructure Operations</span>
+              </div>
+              <h1 class="text-2xl sm:text-3xl text-on-surface tracking-tight font-bold">
+                Maintenance Dashboard
+              </h1>
+              <p class="text-sm text-on-surface-variant max-w-2xl">
+                Monitor campus issues, maintenance activity and recurring problem areas in real time.
+              </p>
+            </div>
+            <!-- Header Controls -->
+            <div class="flex flex-wrap items-center gap-space-sm">
+              <!-- Live Refresh indicator -->
+              <div class="flex items-center gap-2 bg-surface-container-low px-3 py-2 rounded-xl text-on-surface-variant text-xs font-medium cursor-pointer" onclick="refreshAdminDashboard()">
+                <span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+                <span>Live Data Sync</span>
+              </div>
+              <!-- Export Report button -->
+              <button onclick="exportTicketsCsv()" class="flex items-center gap-2 bg-secondary-container hover:bg-secondary-fixed text-on-secondary-container px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95" type="button">
+                <span class="material-symbols-outlined text-[18px]">download</span>
+                <span>Export Tickets CSV</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Metric Overview Cards: 4 Column Bento Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-space-md">
+            <!-- Card 1: TOTAL TICKETS -->
+            <div class="relative bg-surface-container-lowest rounded-xl p-space-lg shadow-sm overflow-hidden flex flex-col justify-between">
+              <div class="absolute top-0 left-0 right-0 h-1.5 bg-primary-container"></div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-on-surface-variant tracking-wider uppercase font-semibold">Total Tickets</span>
+                <div class="w-8 h-8 rounded-lg bg-surface-container-low flex items-center justify-center text-primary">
+                  <span class="material-symbols-outlined text-[20px]">confirmation_number</span>
+                </div>
+              </div>
+              <div class="mt-space-md">
+                <div class="flex items-baseline gap-space-xs">
+                  <span id="admin-metric-total" class="text-3xl font-bold text-on-surface leading-none">--</span>
+                </div>
+                <p class="text-xs text-on-surface-variant mt-1">all reported maintenance tickets</p>
+              </div>
+            </div>
+
+            <!-- Card 2: OPEN TICKETS (Soft Buttermilk) -->
+            <div class="relative bg-secondary-container rounded-xl p-space-lg shadow-sm flex flex-col justify-between">
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-on-secondary-container tracking-wider uppercase font-semibold">Open Tickets</span>
+                <div class="w-8 h-8 rounded-lg bg-secondary-fixed flex items-center justify-center text-on-secondary-container">
+                  <span class="material-symbols-outlined text-[20px]">pending_actions</span>
+                </div>
+              </div>
+              <div class="mt-space-md">
+                <div class="flex items-baseline gap-space-xs">
+                  <span id="admin-metric-open" class="text-3xl font-bold text-on-secondary-container leading-none">--</span>
+                  <span class="text-xs text-on-secondary-container/80 font-medium">pending</span>
+                </div>
+                <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container-lowest/80 text-on-surface text-[11px]">
+                  <span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                  <span>Reported + Assigned queue</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3: CRITICAL OPEN -->
+            <div class="relative bg-surface-container-lowest rounded-xl p-space-lg shadow-sm flex flex-col justify-between">
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-error tracking-wider uppercase font-semibold">Critical Open</span>
+                <span class="animate-pulse flex h-3 w-3 relative">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-error opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-error"></span>
+                </span>
+              </div>
+              <div class="mt-space-md">
+                <div class="flex items-baseline gap-space-xs">
+                  <span id="admin-metric-critical" class="text-3xl font-bold text-error leading-none">--</span>
+                  <span class="text-xs text-error font-semibold">Safety triage</span>
+                </div>
+                <p class="text-xs text-on-surface-variant mt-1 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[16px] text-error">emergency_home</span>
+                  Immediate safety dispatch priority
+                </p>
+              </div>
+            </div>
+
+            <!-- Card 4: FIXED TICKETS (Icy Blue) -->
+            <div class="relative bg-primary-container rounded-xl p-space-lg shadow-sm flex flex-col justify-between text-on-primary-container">
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-on-primary-container tracking-wider uppercase font-semibold">Fixed Tickets</span>
+                <div class="w-8 h-8 rounded-lg bg-surface-container-lowest/60 flex items-center justify-center text-primary">
+                  <span class="material-symbols-outlined text-[20px]">task_alt</span>
+                </div>
+              </div>
+              <div class="mt-space-md">
+                <div class="flex items-baseline gap-space-xs">
+                  <span id="admin-metric-fixed" class="text-3xl font-bold text-on-primary-container leading-none">--</span>
+                  <span class="text-xs text-on-primary-container/80 font-medium">resolved</span>
+                </div>
+                <div class="mt-2 flex items-center justify-between text-[11px]">
+                  <span>Resolution SLA</span>
+                  <span id="admin-metric-sla-label" class="font-semibold text-primary">On Target</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 1: Predictive Maintenance Alert Banner -->
+          <div id="admin-predictive-banner" class="relative overflow-hidden bg-secondary-container rounded-xl shadow-sm p-space-lg">
+            <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-space-lg">
+              <div class="flex items-start gap-space-md">
+                <div class="w-12 h-12 rounded-xl bg-surface-container-lowest/90 text-error flex items-center justify-center shrink-0 shadow-sm">
+                  <span class="material-symbols-outlined text-[28px]">warning</span>
+                </div>
+                <div class="space-y-1">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs uppercase tracking-wide bg-error-container text-on-error-container px-2 py-0.5 rounded-full font-bold">Hotspot Warning</span>
+                    <span class="text-xs text-on-secondary-container/80">30-Day Recurrence Threshold</span>
+                  </div>
+                  <h2 id="predictive-banner-heading" class="text-lg font-bold text-on-secondary-container">
+                    Inspection Recommended: Block C has had 6 electrical issues this month.
+                  </h2>
+                  <p id="predictive-banner-pattern" class="text-sm text-on-secondary-container/90">
+                    Pattern detected: Recurring incidents concentrated within the past 30 days.
+                  </p>
+                </div>
+              </div>
+              <!-- Action Buttons -->
+              <div class="flex flex-wrap items-center gap-space-sm shrink-0 w-full lg:w-auto">
+                <button onclick="navigateTo('predictive-maintenance')" class="w-full sm:w-auto bg-primary-container text-on-primary-container hover:bg-primary-fixed-dim px-space-md py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95" type="button">
+                  <span class="material-symbols-outlined text-[18px]">build_circle</span>
+                  <span>Schedule Inspection</span>
+                </button>
+                <button id="view-related-tickets-btn" onclick="filterDashboardToHotspot()" class="w-full sm:w-auto bg-surface-container-lowest/80 text-on-surface hover:bg-surface-container-lowest px-space-md py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 shadow-sm" type="button">
+                  <span id="view-related-count-label">View Related Tickets</span>
+                  <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 2: Two-Column Data Analytics -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
+            <!-- LEFT: Maintenance Hotspots Heatmap (Block × Category) -->
+            <div class="lg:col-span-7 bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-space-md">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 class="text-base font-bold text-on-surface">Maintenance Hotspots Heatmap</h3>
+                  <p class="text-xs text-on-surface-variant">Cross-tabulation of campus residential blocks by ticket category</p>
+                </div>
+                <div class="flex items-center gap-1 text-xs text-on-surface-variant bg-surface-container-low px-2 py-1 rounded-lg">
+                  <span class="material-symbols-outlined text-[16px]">grid_on</span>
+                  <span>Live Database Matrix</span>
+                </div>
+              </div>
+
+              <!-- Heatmap Table Container -->
+              <div class="overflow-x-auto -mx-space-lg px-space-lg">
+                <table class="w-full text-left min-w-[560px]">
+                  <thead>
+                    <tr class="text-on-surface-variant text-xs border-b-0 pb-2">
+                      <th class="py-2.5 px-3 font-semibold">Campus Block</th>
+                      <th class="py-2.5 px-2 text-center font-semibold">Electrical</th>
+                      <th class="py-2.5 px-2 text-center font-semibold">Plumbing</th>
+                      <th class="py-2.5 px-2 text-center font-semibold">Furniture</th>
+                      <th class="py-2.5 px-2 text-center font-semibold">Civil</th>
+                      <th class="py-2.5 px-2 text-center font-semibold">IT/Network</th>
+                      <th class="py-2.5 px-2 text-center font-semibold">Sanitation</th>
+                      <th class="py-2.5 px-2 text-center font-semibold">Other</th>
+                    </tr>
+                  </thead>
+                  <tbody id="heatmap-tbody" class="space-y-1 text-xs text-on-surface">
+                    <!-- Populated dynamically from SQLite database -->
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Heatmap Legend -->
+              <div class="pt-space-sm flex flex-wrap items-center justify-between gap-space-sm text-on-surface-variant text-xs bg-surface-container-low/60 p-space-sm rounded-xl">
+                <span class="font-semibold text-on-surface">Intensity Scale:</span>
+                <div class="flex items-center gap-space-sm flex-wrap text-[11px]">
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-3.5 h-3.5 rounded bg-surface-container-low border border-outline-variant/40"></span>
+                    <span>Low (0-1)</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-3.5 h-3.5 rounded bg-secondary-container"></span>
+                    <span>Medium (2-3)</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-3.5 h-3.5 rounded bg-primary-container"></span>
+                    <span>High (4-5)</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-3.5 h-3.5 rounded bg-primary"></span>
+                    <span class="font-semibold text-primary">Hotspot (6+)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- RIGHT: Issues by Campus Block (Dynamic SVG Bar Chart) -->
+            <div class="lg:col-span-5 bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-space-md flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between">
+                  <h3 class="text-base font-bold text-on-surface">Issues by Campus Block</h3>
+                  <span id="chart-total-label" class="text-xs bg-surface-container-low px-2 py-1 rounded-full text-on-surface-variant">
+                    Total -- Logged
+                  </span>
+                </div>
+                <p class="text-xs text-on-surface-variant mt-1">
+                  Distribution of cumulative maintenance incidents per living wing.
+                </p>
+              </div>
+
+              <!-- Clean SVG Bar Chart with dynamic data binding -->
+              <div class="py-space-sm" id="svg-chart-container">
+                <!-- Dynamically generated SVG -->
+              </div>
+
+              <!-- Metric summary callout -->
+              <div class="bg-secondary-container/50 p-space-md rounded-xl flex items-center gap-space-sm">
+                <div class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center text-on-secondary-container shrink-0">
+                  <span class="material-symbols-outlined text-[18px]">pie_chart</span>
+                </div>
+                <p id="hotspot-summary-callout" class="text-xs text-on-secondary-container">
+                  Loading campus distribution metrics...
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Active Priority Tickets -->
+          <div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-space-md">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-xs">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-base font-bold text-on-surface">Active Priority Tickets</span>
+                  <span class="bg-error-container text-on-error-container text-xs px-2 py-0.5 rounded-full font-bold">Top Escalations</span>
+                </div>
+                <p class="text-xs text-on-surface-variant">Immediate triage queue requiring facilities engineer sign-off</p>
+              </div>
+              <button onclick="navigateTo('maintenance-tickets')" class="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:text-on-primary-container transition-colors group" type="button">
+                <span>Go to Ticket Management</span>
+                <span class="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">arrow_forward</span>
+              </button>
+            </div>
+
+            <!-- Responsive Table -->
+            <div class="overflow-x-auto -mx-space-lg px-space-lg">
+              <table class="w-full text-left min-w-[700px]">
+                <thead>
+                  <tr class="text-on-surface-variant text-xs bg-surface-container-low/50">
+                    <th class="py-3 px-4 rounded-l-lg font-semibold">Ticket ID</th>
+                    <th class="py-3 px-4 font-semibold">Issue Description</th>
+                    <th class="py-3 px-4 font-semibold">Location</th>
+                    <th class="py-3 px-4 font-semibold">Severity</th>
+                    <th class="py-3 px-4 font-semibold">Status / Details</th>
+                    <th class="py-3 px-4 rounded-r-lg font-semibold text-right">Quick Action</th>
+                  </tr>
+                </thead>
+                <tbody id="dashboard-tickets-tbody" class="divide-y divide-surface-container-low text-sm">
+                  <!-- Populated from SQLite database -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Table Footer -->
+            <div class="pt-space-xs flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm text-xs text-on-surface-variant">
+              <span id="dashboard-table-footer-text">Showing active priority tickets.</span>
+              <div class="flex items-center gap-2">
+                <button onclick="navigateTo('maintenance-tickets')" class="px-3 py-1.5 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface text-xs font-semibold transition-all" type="button">
+                  Manage All Tickets
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================== -->
+      <!-- VIEW 4: ADMIN PREDICTIVE MAINTENANCE ENGINE                          -->
+      <!-- ==================================================================== -->
+      <section id="view-predictive-maintenance" class="view-panel hidden">
+        <div class="px-space-md lg:px-space-xl py-space-lg max-w-[1440px] mx-auto w-full space-y-space-xl">
+          <!-- Header Banner -->
+          <div class="relative overflow-hidden rounded-xl bg-surface-container-low p-space-lg lg:p-space-xl shadow-sm">
+            <div class="absolute -right-20 -top-24 w-80 h-80 rounded-full bg-primary-container/20 blur-3xl pointer-events-none"></div>
+            <div class="absolute right-48 -bottom-20 w-64 h-64 rounded-full bg-secondary-container/40 blur-2xl pointer-events-none"></div>
+            <div class="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg">
+              <div class="max-w-3xl space-y-space-xs">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container text-xs font-semibold">
+                  <span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+                  <span>AI Infrastructure Diagnostics v2.4 Active</span>
+                </div>
+                <h1 class="text-2xl sm:text-3xl font-bold text-on-surface tracking-tight">
+                  Predictive Maintenance &amp; Recurring Issue Intelligence
+                </h1>
+                <p class="text-sm sm:text-base text-on-surface-variant max-w-2xl">
+                  Identify recurring campus issues before they become larger infrastructure hazards or costly emergency repairs.
+                </p>
+              </div>
+              <div class="flex items-center gap-space-sm shrink-0">
+                <button class="group flex items-center gap-space-sm bg-primary-container hover:bg-primary-fixed-dim text-on-primary-container px-space-lg py-3 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md active:scale-95" id="runDiagnosticsBtn" onclick="runDiagnosticsScan()" type="button">
+                  <span class="material-symbols-outlined text-[20px] transition-transform group-hover:rotate-180 duration-500 text-on-primary-container">sync</span>
+                  <span id="run-diagnostics-text">Run AI Campus Diagnostics</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Quick Metrics Strip -->
+            <div class="mt-space-lg pt-space-md grid grid-cols-2 sm:grid-cols-4 gap-space-md">
+              <div class="p-space-md rounded-lg bg-surface-container-lowest shadow-sm flex flex-col">
+                <span class="text-xs text-on-surface-variant">Active Monitored Zones</span>
+                <span id="pred-metric-zones" class="text-2xl font-bold text-on-surface mt-1">5 Wings</span>
+                <span class="text-xs text-secondary mt-1 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[14px]">check_circle</span> 100% Uplink
+                </span>
+              </div>
+              <div class="p-space-md rounded-lg bg-surface-container-lowest shadow-sm flex flex-col">
+                <span class="text-xs text-on-surface-variant">Detected Hotspots</span>
+                <span id="pred-metric-hotspots" class="text-2xl font-bold text-error mt-1">--</span>
+                <span class="text-xs text-error mt-1 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[14px]">warning</span> Recurrence Threshold ≥ 4
+                </span>
+              </div>
+              <div class="p-space-md rounded-lg bg-surface-container-lowest shadow-sm flex flex-col">
+                <span class="text-xs text-on-surface-variant">Preventative Orders</span>
+                <span id="pred-metric-orders" class="text-2xl font-bold text-primary mt-1">--</span>
+                <span class="text-xs text-on-surface-variant mt-1 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[14px]">schedule</span> Coordinated Action
+                </span>
+              </div>
+              <div class="p-space-md rounded-lg bg-surface-container-lowest shadow-sm flex flex-col">
+                <span class="text-xs text-on-surface-variant">Est. Hazard Prevention</span>
+                <span id="pred-metric-savings" class="text-2xl font-bold text-secondary mt-1">$42,500</span>
+                <span class="text-xs text-on-surface-variant mt-1 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[14px]">trending_up</span> Cost avoided this qtr
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- How Predictive Maintenance Works -->
+          <div class="bg-surface-container-lowest rounded-xl p-space-lg lg:p-space-xl shadow-sm space-y-space-md">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-xs">
+              <div>
+                <span class="text-xs uppercase tracking-wider text-primary font-semibold">Automated Intelligence Workflow</span>
+                <h2 class="text-lg font-bold text-on-surface">How Predictive Maintenance Works</h2>
+              </div>
+              <span class="text-xs text-on-surface-variant bg-surface-container px-3 py-1 rounded-full w-fit">Continuous SQLite telemetry feed</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-space-md relative mt-space-md">
+              <!-- Node 1 -->
+              <div class="relative p-space-md rounded-xl bg-secondary-container/40 flex flex-col justify-between group hover:bg-secondary-container transition-all">
+                <div class="space-y-space-xs">
+                  <div class="flex items-center justify-between">
+                    <span class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center text-xs font-bold text-secondary shadow-sm">01</span>
+                    <span class="material-symbols-outlined text-secondary text-[22px]">inbox</span>
+                  </div>
+                  <h3 class="text-sm font-semibold text-on-surface pt-2">Repeated Reports</h3>
+                  <p class="text-xs text-on-surface-variant">Multiple student &amp; staff tickets logged in close spatial proximity.</p>
+                </div>
+                <div class="mt-space-md pt-space-xs flex items-center gap-1 text-xs text-secondary font-semibold">
+                  <span>Input ingestion</span>
+                  <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </div>
+              </div>
+              <!-- Node 2 -->
+              <div class="relative p-space-md rounded-xl bg-primary-container/30 flex flex-col justify-between group hover:bg-primary-container/50 transition-all">
+                <div class="space-y-space-xs">
+                  <div class="flex items-center justify-between">
+                    <span class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center text-xs font-bold text-primary shadow-sm">02</span>
+                    <span class="material-symbols-outlined text-primary text-[22px]">psychology</span>
+                  </div>
+                  <h3 class="text-sm font-semibold text-on-surface pt-2">AI Pattern Analysis</h3>
+                  <p class="text-xs text-on-surface-variant">Location clustering, symptom correlation, and 30-day temporal windowing.</p>
+                </div>
+                <div class="mt-space-md pt-space-xs flex items-center gap-1 text-xs text-primary font-semibold">
+                  <span>Clustering engine</span>
+                  <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </div>
+              </div>
+              <!-- Node 3 -->
+              <div class="relative p-space-md rounded-xl bg-secondary-container/60 flex flex-col justify-between group hover:bg-secondary-container/80 transition-all">
+                <div class="space-y-space-xs">
+                  <div class="flex items-center justify-between">
+                    <span class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center text-xs font-bold text-on-secondary-container shadow-sm">03</span>
+                    <span class="material-symbols-outlined text-secondary text-[22px]">radar</span>
+                  </div>
+                  <h3 class="text-sm font-semibold text-on-surface pt-2">Hotspot Detection</h3>
+                  <p class="text-xs text-on-surface-variant">Threshold exceeded: 4+ correlated component faults detected within 30 days.</p>
+                </div>
+                <div class="mt-space-md pt-space-xs flex items-center gap-1 text-xs text-secondary font-semibold">
+                  <span>Threshold trigger</span>
+                  <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </div>
+              </div>
+              <!-- Node 4 -->
+              <div class="relative p-space-md rounded-xl bg-primary-fixed flex flex-col justify-between group hover:bg-primary-fixed-dim transition-all">
+                <div class="space-y-space-xs">
+                  <div class="flex items-center justify-between">
+                    <span class="w-8 h-8 rounded-lg bg-surface-container-lowest flex items-center justify-center text-xs font-bold text-primary shadow-sm">04</span>
+                    <span class="material-symbols-outlined text-primary text-[22px]">build_circle</span>
+                  </div>
+                  <h3 class="text-sm font-semibold text-on-surface pt-2">Automated Action</h3>
+                  <p class="text-xs text-on-surface-variant">Preventative inspection recommendations generated &amp; lead tech dispatched.</p>
+                </div>
+                <div class="mt-space-md pt-space-xs flex items-center gap-1 text-xs text-on-primary-fixed-variant font-semibold">
+                  <span>Work-order dispatch</span>
+                  <span class="material-symbols-outlined text-[16px]">done_all</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Recurring Issue Patterns Section -->
+          <div class="space-y-space-md">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-xs">
+              <div>
+                <span class="text-xs uppercase tracking-wider text-secondary font-semibold">Triage &amp; Remediation</span>
+                <h2 class="text-lg font-bold text-on-surface">Active Recurring Issue Patterns &amp; Recommendations</h2>
+              </div>
+              <div class="flex items-center gap-space-xs text-xs text-on-surface-variant">
+                <span>Filter:</span>
+                <span class="font-semibold text-on-surface bg-surface-container-low px-2 py-1 rounded">30-Day Window (Threshold ≥ 4)</span>
+              </div>
+            </div>
+
+            <!-- Dynamic Pattern Cards Container -->
+            <div id="predictive-patterns-container" class="grid grid-cols-1 gap-space-lg">
+              <!-- Dynamically populated from SQLite database -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================== -->
+      <!-- VIEW 5: ADMIN MAINTENANCE TICKETS MANAGEMENT                         -->
+      <!-- ==================================================================== -->
+      <section id="view-maintenance-tickets" class="view-panel hidden">
+        <div class="flex flex-col w-full px-space-lg lg:px-margin-lg py-space-xl space-y-space-xl max-w-7xl mx-auto">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+            <div>
+              <h1 class="text-2xl sm:text-3xl font-bold text-on-surface tracking-tight">Maintenance Tickets Queue</h1>
+              <p class="text-sm text-on-surface-variant mt-1">Search, triage, update status, and manage all campus work orders.</p>
+            </div>
+            <button onclick="navigateTo('report-issue')" class="inline-flex items-center gap-2 bg-primary-container hover:bg-primary-fixed-dim text-on-primary-container text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm transition-all" type="button">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+              <span>Create New Ticket</span>
+            </button>
+          </div>
+
+          <!-- Multi-filter bar -->
+          <div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <!-- Search -->
+              <div class="relative sm:col-span-2 lg:col-span-2">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+                <input id="admin-search-input" oninput="filterAdminTicketsTable()" type="text" placeholder="Search ID, issue, room, block, department..." class="w-full bg-surface-container-low text-xs pl-9 pr-3 py-2.5 rounded-lg focus:outline-none focus:bg-surface-container"/>
+              </div>
+              <!-- Status -->
+              <select id="admin-filter-status" onchange="filterAdminTicketsTable()" class="bg-surface-container-low text-xs px-3 py-2.5 rounded-lg focus:outline-none cursor-pointer">
+                <option value="All">All Statuses</option>
+                <option value="Reported">Reported</option>
+                <option value="Assigned">Assigned</option>
+                <option value="Fixed">Fixed</option>
+              </select>
+              <!-- Category -->
+              <select id="admin-filter-category" onchange="filterAdminTicketsTable()" class="bg-surface-container-low text-xs px-3 py-2.5 rounded-lg focus:outline-none cursor-pointer">
+                <option value="All">All Categories</option>
+                <option value="Electrical">Electrical</option>
+                <option value="Plumbing">Plumbing</option>
+                <option value="Furniture">Furniture</option>
+                <option value="Civil">Civil</option>
+                <option value="IT/Network">IT/Network</option>
+                <option value="Sanitation">Sanitation</option>
+                <option value="Other">Other</option>
+              </select>
+              <!-- Block -->
+              <select id="admin-filter-block" onchange="filterAdminTicketsTable()" class="bg-surface-container-low text-xs px-3 py-2.5 rounded-lg focus:outline-none cursor-pointer">
+                <option value="All">All Blocks</option>
+                <option value="Block A">Block A</option>
+                <option value="Block B">Block B</option>
+                <option value="Block C">Block C</option>
+                <option value="Block D">Block D</option>
+                <option value="Block E">Block E</option>
+              </select>
+            </div>
+            <!-- Secondary row: Priority & Sort -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-surface-container text-xs text-on-surface-variant">
+              <div class="flex items-center gap-2">
+                <span>Priority:</span>
+                <select id="admin-filter-priority" onchange="filterAdminTicketsTable()" class="bg-surface-container-low text-xs px-2.5 py-1.5 rounded-lg focus:outline-none cursor-pointer">
+                  <option value="All">All Priorities</option>
+                  <option value="CRITICAL">CRITICAL</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="LOW">LOW</option>
+                </select>
+              </div>
+              <div class="flex items-center gap-2">
+                <span>Sort:</span>
+                <select id="admin-filter-sort" onchange="filterAdminTicketsTable()" class="bg-surface-container-low text-xs px-2.5 py-1.5 rounded-lg focus:outline-none cursor-pointer">
+                  <option value="priority">Priority Tier (Critical First)</option>
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="reports">Report Count</option>
+                </select>
+                <button onclick="resetAdminFilters()" class="text-xs text-primary hover:underline ml-2">Reset</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Complete Tickets Table -->
+          <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left min-w-[850px]">
+                <thead>
+                  <tr class="bg-surface-container-low/70 text-on-surface-variant text-xs font-semibold">
+                    <th class="py-3 px-4">ID</th>
+                    <th class="py-3 px-4">Issue</th>
+                    <th class="py-3 px-3">Category</th>
+                    <th class="py-3 px-3">Priority</th>
+                    <th class="py-3 px-3">Location</th>
+                    <th class="py-3 px-3">Department</th>
+                    <th class="py-3 px-2 text-center">Reports</th>
+                    <th class="py-3 px-3">Status</th>
+                    <th class="py-3 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="all-tickets-tbody" class="divide-y divide-surface-container-low text-xs">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+            </div>
+            <div id="all-tickets-empty" class="p-8 text-center text-on-surface-variant hidden">
+              <span class="material-symbols-outlined text-4xl text-outline-variant mb-2">inbox</span>
+              <p class="text-sm font-semibold">No maintenance tickets match your current filters.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================== -->
+      <!-- VIEW 6: CAMPUS ANALYTICS                                             -->
+      <!-- ==================================================================== -->
+      <section id="view-analytics" class="view-panel hidden">
+        <div class="flex flex-col w-full px-space-lg lg:px-margin-lg py-space-xl space-y-space-xl max-w-7xl mx-auto">
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-on-surface tracking-tight">Campus Operations Analytics</h1>
+            <p class="text-sm text-on-surface-variant mt-1">Cross-campus maintenance patterns, category velocity, and resolution SLA telemetry.</p>
+          </div>
+
+          <!-- Charts Bento Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-space-lg">
+            <!-- Chart 1: Issues by Category -->
+            <div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-3">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold text-on-surface">Issues by Category</h3>
+                <span class="text-xs text-on-surface-variant bg-surface-container-low px-2 py-0.5 rounded">All-Time</span>
+              </div>
+              <div id="analytics-category-bars" class="space-y-2 pt-2">
+                <!-- Dynamically generated bars -->
+              </div>
+            </div>
+
+            <!-- Chart 2: Priority Distribution -->
+            <div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-3">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold text-on-surface">Priority Distribution</h3>
+                <span class="text-xs text-on-surface-variant bg-surface-container-low px-2 py-0.5 rounded">Severity</span>
+              </div>
+              <div id="analytics-priority-bars" class="space-y-2 pt-2">
+                <!-- Dynamically generated bars -->
+              </div>
+            </div>
+
+            <!-- Chart 3: Issues by Campus Block -->
+            <div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-3">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold text-on-surface">Issues by Campus Block</h3>
+                <span class="text-xs text-on-surface-variant bg-surface-container-low px-2 py-0.5 rounded">Campus Wings</span>
+              </div>
+              <div id="analytics-block-bars" class="space-y-2 pt-2">
+                <!-- Dynamically generated bars -->
+              </div>
+            </div>
+
+            <!-- Chart 4: Resolution Status Distribution -->
+            <div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-3">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold text-on-surface">Status Distribution</h3>
+                <span class="text-xs text-on-surface-variant bg-surface-container-low px-2 py-0.5 rounded">Workflow</span>
+              </div>
+              <div id="analytics-status-bars" class="space-y-2 pt-2">
+                <!-- Dynamically generated bars -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================== -->
+      <!-- VIEW 7: PLATFORM SETTINGS & CREDENTIALS                              -->
+      <!-- ==================================================================== -->
+      <section id="view-settings" class="view-panel hidden">
+        <div class="flex flex-col w-full px-space-lg lg:px-margin-lg py-space-xl space-y-space-xl max-w-4xl mx-auto">
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-on-surface tracking-tight">Platform Configuration &amp; Settings</h1>
+            <p class="text-sm text-on-surface-variant mt-1">Configure emergency contacts, AI diagnosis API keys, and predictive thresholds.</p>
+          </div>
+
+          <!-- Settings Form -->
+          <div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-space-lg">
+            <!-- Emergency Security Contact -->
+            <div class="space-y-1.5">
+              <label class="text-xs font-bold text-on-surface uppercase tracking-wider" for="setting-security-contact">Emergency Security Contact Number</label>
+              <p class="text-xs text-on-surface-variant">Displayed on severe safety alert banners (fire, sparks, exposed wires). If left empty, banner clearly displays "Security contact number not configured."</p>
+              <div class="relative max-w-md">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">call</span>
+                <input id="setting-security-contact" type="text" placeholder="e.g. 555-0199 or +1-800-555-0199" class="w-full bg-surface-container-low text-sm pl-9 pr-3 py-2.5 rounded-lg focus:outline-none focus:bg-surface-container"/>
+              </div>
+            </div>
+
+            <!-- AI API Key -->
+            <div class="space-y-1.5 pt-2 border-t border-surface-container">
+              <label class="text-xs font-bold text-on-surface uppercase tracking-wider" for="setting-openai-key">OpenAI API Key (Vision Diagnosis)</label>
+              <p class="text-xs text-on-surface-variant">Enables automated AI visual damage analysis and priority triage. If unconfigured, the app prompts for credentials without fabricating results.</p>
+              <div class="relative max-w-md">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">key</span>
+                <input id="setting-openai-key" type="password" placeholder="sk-..." class="w-full bg-surface-container-low text-sm pl-9 pr-3 py-2.5 rounded-lg focus:outline-none focus:bg-surface-container"/>
+              </div>
+            </div>
+
+            <!-- Gemini API Key -->
+            <div class="space-y-1.5 pt-2 border-t border-surface-container">
+              <label class="text-xs font-bold text-on-surface uppercase tracking-wider" for="setting-gemini-key">Google Gemini API Key (Alternative Vision Provider)</label>
+              <p class="text-xs text-on-surface-variant">Optional alternative to OpenAI for vision diagnosis.</p>
+              <div class="relative max-w-md">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">key</span>
+                <input id="setting-gemini-key" type="password" placeholder="AIzaSy..." class="w-full bg-surface-container-low text-sm pl-9 pr-3 py-2.5 rounded-lg focus:outline-none focus:bg-surface-container"/>
+              </div>
+            </div>
+
+            <!-- Predictive Maintenance Threshold -->
+            <div class="space-y-1.5 pt-2 border-t border-surface-container">
+              <label class="text-xs font-bold text-on-surface uppercase tracking-wider" for="setting-threshold">Predictive Maintenance Threshold (Issues / 30 Days)</label>
+              <p class="text-xs text-on-surface-variant">Number of recurring issues in a single block and category within 30 days required to trigger an automated inspection recommendation (Default: 4).</p>
+              <div class="relative max-w-xs">
+                <input id="setting-threshold" type="number" min="1" max="20" value="4" class="w-full bg-surface-container-low text-sm px-3 py-2.5 rounded-lg focus:outline-none focus:bg-surface-container"/>
+              </div>
+            </div>
+
+            <!-- Save Settings Button -->
+            <div class="pt-4 border-t border-surface-container flex items-center justify-between">
+              <span id="settings-save-status" class="text-xs font-semibold text-primary"></span>
+              <button onclick="savePlatformSettings()" class="bg-primary text-on-primary hover:bg-primary/90 px-6 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all active:scale-95" type="button">
+                Save Platform Settings
+              </button>
+            </div>
+          </div>
+
+          <!-- Database Diagnostics & Persistence Info -->
+          <div class="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm space-y-3">
+            <h3 class="text-sm font-bold text-on-surface uppercase tracking-wider">Database Persistence &amp; Integrity</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div class="p-3 bg-surface-container-low rounded-lg">
+                <span class="text-on-surface-variant block">Storage Engine</span>
+                <span class="font-bold text-on-surface">SQLite 3 (Persistent)</span>
+              </div>
+              <div class="p-3 bg-surface-container-low rounded-lg">
+                <span class="text-on-surface-variant block">Database File</span>
+                <span class="font-bold text-on-surface truncate">tickets.db</span>
+              </div>
+              <div class="p-3 bg-surface-container-low rounded-lg">
+                <span class="text-on-surface-variant block">Performance Indexes</span>
+                <span class="font-bold text-secondary">Active (7 Indexes)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- MODAL 1: BROWSER CAMERA CAPTURE MODAL                                -->
+  <!-- ==================================================================== -->
+  <div id="camera-modal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-surface-container-lowest rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col">
+      <div class="p-4 bg-surface-container flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary text-[22px]">photo_camera</span>
+          <span class="text-sm font-bold text-on-surface">Live Campus Camera</span>
+        </div>
+        <button onclick="closeCameraModal()" class="text-on-surface-variant hover:text-on-surface p-1 rounded-lg hover:bg-surface-container-high" type="button">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <div class="p-4 flex flex-col items-center">
+        <!-- Live Video Viewport -->
+        <div class="relative w-full h-72 bg-black rounded-xl overflow-hidden flex items-center justify-center shadow-inner">
+          <video id="camera-video" class="w-full h-full object-cover" autoplay playsinline></video>
+          <canvas id="camera-canvas" class="hidden"></canvas>
+          <div id="camera-error-banner" class="absolute inset-0 bg-surface-container-lowest p-6 flex flex-col items-center justify-center text-center hidden">
+            <span class="material-symbols-outlined text-error text-4xl mb-2">videocam_off</span>
+            <p id="camera-error-text" class="text-xs text-error font-semibold">Camera permission denied.</p>
+            <p class="text-[11px] text-on-surface-variant mt-1">Please select an image file to upload instead.</p>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between w-full mt-4">
+          <button onclick="closeCameraModal()" class="px-4 py-2 rounded-xl bg-surface-container text-on-surface text-xs font-semibold hover:bg-surface-container-high" type="button">
+            Cancel
+          </button>
+          <button id="snap-photo-btn" onclick="capturePhotoFromCamera()" class="flex items-center gap-2 bg-primary-container text-on-primary-container hover:bg-primary-fixed-dim px-6 py-2.5 rounded-xl text-xs font-bold shadow-md active:scale-95" type="button">
+            <span class="material-symbols-outlined text-[18px]">camera</span>
+            <span>Snap Photo</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- MODAL 2: TICKET DETAILS & STATUS UPDATER                             -->
+  <!-- ==================================================================== -->
+  <div id="ticket-modal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-surface-container-lowest rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <div class="p-4 bg-surface-container-low flex items-center justify-between border-b border-surface-container">
+        <div class="flex items-center gap-2">
+          <span class="px-2.5 py-0.5 rounded-md bg-secondary-container text-on-secondary-container text-xs font-bold">Ticket Details</span>
+          <span id="modal-ticket-id" class="text-xs font-bold text-on-surface">#1028</span>
+        </div>
+        <button onclick="closeTicketModal()" class="text-on-surface-variant hover:text-on-surface p-1 rounded-lg hover:bg-surface-container" type="button">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-4">
+        <div>
+          <span id="modal-priority-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-error-container text-on-error-container">HIGH</span>
+          <h2 id="modal-issue" class="text-lg font-bold text-on-surface mt-1.5">Issue Title</h2>
+          <p id="modal-location" class="text-xs text-on-surface-variant mt-0.5">Block C • Room 204</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 p-3 bg-surface-container-low rounded-xl text-xs">
+          <div>
+            <span class="text-on-surface-variant block font-medium">Category</span>
+            <span id="modal-category" class="font-bold text-on-surface">Electrical</span>
+          </div>
+          <div>
+            <span class="text-on-surface-variant block font-medium">Assigned Department</span>
+            <span id="modal-department" class="font-bold text-on-surface">Facilities Ops</span>
+          </div>
+          <div>
+            <span class="text-on-surface-variant block font-medium">Report Count</span>
+            <span id="modal-reports" class="font-bold text-secondary">1 report</span>
+          </div>
+          <div>
+            <span class="text-on-surface-variant block font-medium">Current Status</span>
+            <span id="modal-status-current" class="font-bold text-primary">Reported</span>
+          </div>
+        </div>
+
+        <div class="p-3 bg-surface-container-low rounded-xl space-y-1">
+          <span class="text-xs uppercase tracking-wider font-bold text-on-surface-variant">Recommended Fix / Action</span>
+          <p id="modal-suggested-fix" class="text-xs text-on-surface">Action protocol details</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 text-xs text-on-surface-variant">
+          <div>Created: <span id="modal-created" class="font-medium text-on-surface">--</span></div>
+          <div>Updated: <span id="modal-updated" class="font-medium text-on-surface">--</span></div>
+        </div>
+
+        <!-- Status Change Control -->
+        <div class="pt-3 border-t border-surface-container space-y-2">
+          <label class="text-xs font-bold text-on-surface uppercase tracking-wider" for="modal-status-select">Update Ticket Status</label>
+          <div class="flex items-center gap-2">
+            <select id="modal-status-select" class="flex-1 bg-surface-container-low text-xs font-semibold px-3 py-2.5 rounded-xl focus:outline-none cursor-pointer">
+              <option value="Reported">Reported</option>
+              <option value="Assigned">Assigned</option>
+              <option value="Fixed">Fixed</option>
+            </select>
+            <button onclick="saveModalStatusChange()" class="bg-primary text-on-primary hover:bg-primary/90 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95" type="button">
+              Save Status
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- MODAL 3: TICKET SUBMISSION CONFIRMATION MODAL                        -->
+  <!-- ==================================================================== -->
+  <div id="confirm-modal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-surface-container-lowest rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center gap-3">
+        <div id="confirm-icon-box" class="w-12 h-12 rounded-2xl bg-primary-container text-on-primary-container flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-[28px]">verified</span>
+        </div>
+        <div>
+          <h3 id="confirm-modal-title" class="text-lg font-bold text-on-surface">Ticket Submitted</h3>
+          <p id="confirm-modal-subtitle" class="text-xs text-on-surface-variant">Master Ticket #1028 registered in database.</p>
+        </div>
+      </div>
+
+      <div class="p-3 bg-surface-container-low rounded-xl space-y-2 text-xs">
+        <div class="flex justify-between">
+          <span class="text-on-surface-variant">Ticket ID:</span>
+          <span id="confirm-ticket-id" class="font-bold text-on-surface">#1028</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-on-surface-variant">Status:</span>
+          <span id="confirm-status" class="font-bold text-primary">Reported</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-on-surface-variant">Location:</span>
+          <span id="confirm-location" class="font-bold text-on-surface">Block C, Rm 204</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-on-surface-variant">Category:</span>
+          <span id="confirm-category" class="font-bold text-on-surface">Electrical</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-on-surface-variant">Priority:</span>
+          <span id="confirm-priority" class="font-bold text-error">HIGH</span>
+        </div>
+        <div id="confirm-merged-row" class="flex justify-between pt-1 border-t border-surface-container hidden">
+          <span class="text-secondary font-semibold">Report Count:</span>
+          <span id="confirm-report-count" class="font-bold text-secondary">2 reports (Escalated)</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 pt-2">
+        <button onclick="closeConfirmModalAndStay()" class="flex-1 py-2.5 rounded-xl bg-surface-container text-on-surface text-xs font-semibold hover:bg-surface-container-high transition-colors" type="button">
+          Submit Another
+        </button>
+        <button onclick="closeConfirmModalAndGoReports()" class="flex-1 py-2.5 rounded-xl bg-primary-container text-on-primary-container text-xs font-bold hover:bg-primary-fixed-dim transition-colors shadow-sm" type="button">
+          View in My Reports
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast-success" class="fixed bottom-6 right-6 z-50 transform translate-y-32 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="bg-inverse-surface text-inverse-on-surface p-4 rounded-xl shadow-xl flex items-center gap-3 max-w-md">
+      <span class="material-symbols-outlined text-primary-fixed-dim text-[24px]">verified</span>
+      <div class="flex flex-col">
+        <span id="toast-title" class="text-xs font-semibold">Operation Successful</span>
+        <span id="toast-body" class="text-[11px] text-surface-variant">Database updated successfully.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application Controller -->
+  <script src="/static/app.js"></script>
+  <script>
+    // Initialize initial route from server template rendering
+    window.INITIAL_VIEW = "{{INITIAL_VIEW}}";
+  </script>
+</body>
+</html>
