@@ -23,12 +23,16 @@ const state = {
 // ====================================================================
 // INITIALIZATION
 // ====================================================================
+<<<<<<< HEAD
 document.addEventListener("DOMContentLoaded", async () => {
   const auth = await fetch("/api/auth/me").then(r => r.json()).catch(() => ({ authenticated: false }));
   if (!auth.authenticated) {
     window.location.href = window.location.pathname.includes("maintenance") || window.location.pathname.includes("analytics") || window.location.pathname.startsWith("/admin") ? "/admin-login" : "/student-login";
     return;
   }
+=======
+document.addEventListener("DOMContentLoaded", () => {
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
   initMobileSidebar();
   initDragAndDrop();
   initFileInput();
@@ -37,8 +41,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Route from server template or url path
   const initial = window.INITIAL_VIEW || window.location.pathname.replace("/", "") || "report-issue";
+<<<<<<< HEAD
   state.currentRole = auth.user.role;
   setAppRole(state.currentRole, false, auth.user);
+=======
+  setAppRole(state.currentRole, false);
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
   navigateTo(initial, false);
 
   // Poll duplicate check on report issue
@@ -139,12 +147,15 @@ function clearNotifications() {
 // ROUTING & NAVIGATION
 // ====================================================================
 function navigateTo(viewName, pushState = true) {
+<<<<<<< HEAD
   const adminViews = ["maintenance-dashboard", "maintenance-tickets", "predictive-maintenance", "analytics", "settings"];
   if (state.currentRole === "student" && adminViews.includes(viewName)) {
     viewName = "report-issue";
   } else if (state.currentRole === "admin" && ["report-issue", "my-reports"].includes(viewName)) {
     viewName = "maintenance-dashboard";
   }
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
   // Normalize route aliases
   if (viewName === "/" || viewName === "student-dashboard") viewName = "report-issue";
   if (viewName === "admin") viewName = "maintenance-dashboard";
@@ -215,7 +226,11 @@ document.addEventListener("click", (e) => {
 // ====================================================================
 // ROLE TOGGLING (Student Mode vs Operations Admin)
 // ====================================================================
+<<<<<<< HEAD
 function setAppRole(role, autoNavigate = true, user = null) {
+=======
+function setAppRole(role, autoNavigate = true) {
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
   state.currentRole = role;
   localStorage.setItem("campuscare_role", role);
 
@@ -225,20 +240,30 @@ function setAppRole(role, autoNavigate = true, user = null) {
   const userRole = document.getElementById("user-role-label");
   const userDorm = document.getElementById("user-dorm-badge");
   const userAvatar = document.getElementById("user-avatar");
+<<<<<<< HEAD
   const studentNav = document.getElementById("nav-student-section");
   const adminNav = document.getElementById("nav-admin-section");
 
   if (role === "admin") {
     if (studentNav) studentNav.classList.add("hidden");
     if (adminNav) adminNav.classList.remove("hidden");
+=======
+
+  if (role === "admin") {
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     if (studentBtn) {
       studentBtn.className = "flex-1 py-1 px-2 rounded text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-all";
     }
     if (operationsBtn) {
       operationsBtn.className = "flex-1 py-1 px-2 rounded text-xs font-semibold bg-secondary-container text-on-secondary-container shadow-sm transition-all";
     }
+<<<<<<< HEAD
     if (userName) userName.textContent = user?.name || "Administrator";
     if (userRole) userRole.textContent = "Campus Administrator";
+=======
+    if (userName) userName.textContent = "Facilities Ops Dispatch";
+    if (userRole) userRole.textContent = "Lead Operations Engineer";
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     if (userDorm) userDorm.textContent = "Campus-wide";
     if (userAvatar) {
       userAvatar.textContent = "OP";
@@ -248,16 +273,24 @@ function setAppRole(role, autoNavigate = true, user = null) {
       navigateTo("maintenance-dashboard");
     }
   } else {
+<<<<<<< HEAD
     if (studentNav) studentNav.classList.remove("hidden");
     if (adminNav) adminNav.classList.add("hidden");
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     if (studentBtn) {
       studentBtn.className = "flex-1 py-1 px-2 rounded text-xs font-semibold bg-secondary-container text-on-secondary-container shadow-sm transition-all";
     }
     if (operationsBtn) {
       operationsBtn.className = "flex-1 py-1 px-2 rounded text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-all";
     }
+<<<<<<< HEAD
     if (userName) userName.textContent = user?.name || "Student";
     if (userRole) userRole.textContent = "Student";
+=======
+    if (userName) userName.textContent = "Alex Rivera";
+    if (userRole) userRole.textContent = "Student / Resident Advisor";
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     if (userDorm) userDorm.textContent = "Block C • 304";
     if (userAvatar) {
       userAvatar.textContent = "AR";
@@ -270,12 +303,18 @@ function setAppRole(role, autoNavigate = true, user = null) {
 }
 
 function toggleRoleSwitch() {
+<<<<<<< HEAD
   logout();
 }
 
 async function logout() {
   await fetch("/api/auth/logout", { method: "POST" });
   window.location.href = state.currentRole === "admin" ? "/admin-login" : "/student-login";
+=======
+  const newRole = state.currentRole === "student" ? "admin" : "student";
+  setAppRole(newRole, true);
+  showToast("Role Switched", `Switched to ${newRole === "admin" ? "Operations Admin" : "Student Mode"}`);
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
 }
 
 // Mobile Sidebar Drawer

@@ -74,9 +74,12 @@ def init_db() -> None:
                 suggested_fix TEXT,
                 block TEXT NOT NULL,
                 room TEXT NOT NULL,
+<<<<<<< HEAD
                 user_id INTEGER,
                 student_id TEXT,
                 student_name TEXT,
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
                 status TEXT NOT NULL DEFAULT 'Reported',
                 report_count INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
@@ -84,6 +87,7 @@ def init_db() -> None:
             )"""
         )
 
+<<<<<<< HEAD
         ticket_columns = {row["name"] for row in connection.execute("PRAGMA table_info(tickets)").fetchall()}
         for column in ("user_id", "student_id", "student_name"):
             if column not in ticket_columns:
@@ -102,6 +106,8 @@ def init_db() -> None:
             )"""
         )
 
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
         connection.execute(
             """CREATE TABLE IF NOT EXISTS ticket_reviews (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,7 +127,10 @@ def init_db() -> None:
         connection.execute("CREATE INDEX IF NOT EXISTS idx_tickets_priority ON tickets(priority);")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_tickets_created_at ON tickets(created_at);")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_tickets_open_lookup ON tickets(block, room, category, status);")
+<<<<<<< HEAD
         connection.execute("CREATE INDEX IF NOT EXISTS idx_tickets_user ON tickets(user_id);")
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
 
         # Migrate any single-letter blocks ('A' -> 'Block A')
         connection.execute(
@@ -205,11 +214,18 @@ def add_ticket(t: dict) -> tuple[int, bool]:
 
         cursor = connection.execute(
             """INSERT INTO tickets
+<<<<<<< HEAD
                (issue, category, priority, department, suggested_fix, block, room, user_id,
                 student_id, student_name, status, report_count, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Reported', 1, ?, ?)""",
             (issue, category, priority, department, suggested_fix, block, room,
              t.get("user_id"), t.get("student_id"), t.get("student_name"), now, now),
+=======
+               (issue, category, priority, department, suggested_fix, block, room, status,
+                report_count, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'Reported', 1, ?, ?)""",
+            (issue, category, priority, department, suggested_fix, block, room, now, now),
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
         )
         return int(cursor.lastrowid), False
 
@@ -221,7 +237,10 @@ def get_tickets(
     priority: str | None = None,
     search: str | None = None,
     sort_by: str = "priority",
+<<<<<<< HEAD
     user_id: int | None = None,
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
 ) -> list[dict]:
     """Retrieve tickets with optional filtering and priority sorting."""
     init_db()
@@ -231,10 +250,13 @@ def get_tickets(
     conditions = []
     params: list[Any] = []
 
+<<<<<<< HEAD
     if user_id is not None:
         conditions.append("user_id = ?")
         params.append(user_id)
 
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     if status and status != "All":
         conditions.append("status = ?")
         params.append(status)

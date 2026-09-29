@@ -5,17 +5,26 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
+<<<<<<< HEAD
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 import secrets
+=======
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import ai_service
 import db
+<<<<<<< HEAD
 import auth_service
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
 
 load_dotenv()
 
@@ -42,8 +51,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+<<<<<<< HEAD
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET") or secrets.token_urlsafe(32),
                    session_cookie="campuscare_session", max_age=60 * 60 * 8, same_site="lax", https_only=False)
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -74,6 +86,7 @@ class ConfigUpdate(BaseModel):
     threshold: Optional[int] = None
 
 
+<<<<<<< HEAD
 class StudentRegistration(BaseModel):
     name: str
     student_id: str
@@ -110,6 +123,8 @@ def protected_page(request: Request, role: str) -> HTMLResponse | RedirectRespon
     return _render_index("report-issue" if role == "student" else "maintenance-dashboard")
 
 
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
 # -------------------------------------------------------------
 # Frontend Routes
 # -------------------------------------------------------------
@@ -124,6 +139,7 @@ def _render_index(initial_view: str = "report-issue") -> HTMLResponse:
 
 
 @app.get("/", response_class=HTMLResponse)
+<<<<<<< HEAD
 async def route_root(request: Request):
     user = current_user(request)
     if not user:
@@ -234,12 +250,62 @@ async def route_analytics(request: Request):
 async def route_settings(request: Request):
     page = protected_page(request, "admin")
     return page if isinstance(page, RedirectResponse) else _render_index("settings")
+=======
+async def route_root():
+    return _render_index("report-issue")
+
+
+@app.get("/report-issue", response_class=HTMLResponse)
+async def route_report_issue():
+    return _render_index("report-issue")
+
+
+@app.get("/student-dashboard", response_class=HTMLResponse)
+async def route_student_dashboard():
+    return _render_index("report-issue")
+
+
+@app.get("/my-reports", response_class=HTMLResponse)
+async def route_my_reports():
+    return _render_index("my-reports")
+
+
+@app.get("/maintenance-dashboard", response_class=HTMLResponse)
+async def route_maintenance_dashboard():
+    return _render_index("maintenance-dashboard")
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def route_admin():
+    return _render_index("maintenance-dashboard")
+
+
+@app.get("/predictive-maintenance", response_class=HTMLResponse)
+async def route_predictive_maintenance():
+    return _render_index("predictive-maintenance")
+
+
+@app.get("/maintenance-tickets", response_class=HTMLResponse)
+async def route_maintenance_tickets():
+    return _render_index("maintenance-tickets")
+
+
+@app.get("/analytics", response_class=HTMLResponse)
+async def route_analytics():
+    return _render_index("analytics")
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def route_settings():
+    return _render_index("settings")
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
 
 
 # -------------------------------------------------------------
 # REST API Endpoints
 # -------------------------------------------------------------
 
+<<<<<<< HEAD
 @app.get("/api/auth/me")
 async def auth_me(request: Request):
     user = current_user(request)
@@ -285,6 +351,13 @@ async def create_ticket(ticket: TicketCreate, request: Request):
         user = require_user(request, "student")
         payload = ticket.model_dump()
         payload.update({"user_id": user["id"], "student_id": user.get("student_id"), "student_name": user["name"]})
+=======
+@app.post("/api/tickets")
+async def create_ticket(ticket: TicketCreate):
+    """Submit a ticket. Adheres to shared ticket contract returning (ticket_id, merged)."""
+    try:
+        payload = ticket.model_dump()
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
         ticket_id, merged = db.add_ticket(payload)
         saved_ticket = db.get_ticket(ticket_id)
         return {
@@ -293,8 +366,11 @@ async def create_ticket(ticket: TicketCreate, request: Request):
             "merged": merged,
             "ticket": saved_ticket,
         }
+<<<<<<< HEAD
     except HTTPException:
         raise
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -303,7 +379,10 @@ async def create_ticket(ticket: TicketCreate, request: Request):
 
 @app.get("/api/tickets")
 async def list_tickets(
+<<<<<<< HEAD
     request: Request,
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     status: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     block: Optional[str] = Query(None),
@@ -313,7 +392,10 @@ async def list_tickets(
 ):
     """Retrieve tickets with search, filtering, and priority sorting."""
     try:
+<<<<<<< HEAD
         user = require_user(request)
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
         tickets = db.get_tickets(
             status=status,
             category=category,
@@ -321,11 +403,16 @@ async def list_tickets(
             priority=priority,
             search=search,
             sort_by=sort_by,
+<<<<<<< HEAD
             user_id=user["id"] if user["role"] == "student" else None,
         )
         return {"success": True, "count": len(tickets), "tickets": tickets}
     except HTTPException:
         raise
+=======
+        )
+        return {"success": True, "count": len(tickets), "tickets": tickets}
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -333,6 +420,7 @@ async def list_tickets(
 
 
 @app.get("/api/tickets/{ticket_id}")
+<<<<<<< HEAD
 async def get_ticket_details(ticket_id: int, request: Request):
     """Retrieve detailed information for a single ticket."""
     user = require_user(request)
@@ -341,21 +429,37 @@ async def get_ticket_details(ticket_id: int, request: Request):
         raise HTTPException(status_code=404, detail=f"Ticket #{ticket_id} not found.")
     if user["role"] == "student" and ticket.get("user_id") != user["id"]:
         raise HTTPException(status_code=403, detail="You can only access your own reports.")
+=======
+async def get_ticket_details(ticket_id: int):
+    """Retrieve detailed information for a single ticket."""
+    ticket = db.get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail=f"Ticket #{ticket_id} not found.")
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     return {"success": True, "ticket": ticket}
 
 
 @app.patch("/api/tickets/{ticket_id}/status")
+<<<<<<< HEAD
 async def update_status(ticket_id: int, body: TicketStatusUpdate, request: Request):
     """Update ticket status and refresh updated_at."""
     try:
         require_user(request, "admin")
+=======
+async def update_status(ticket_id: int, body: TicketStatusUpdate):
+    """Update ticket status and refresh updated_at."""
+    try:
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
         success = db.update_ticket_status(ticket_id, body.status)
         if not success:
             raise HTTPException(status_code=404, detail=f"Ticket #{ticket_id} not found.")
         updated_ticket = db.get_ticket(ticket_id)
         return {"success": True, "ticket": updated_ticket}
+<<<<<<< HEAD
     except HTTPException:
         raise
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -363,6 +467,7 @@ async def update_status(ticket_id: int, body: TicketStatusUpdate, request: Reque
 
 
 @app.get("/api/metrics")
+<<<<<<< HEAD
 async def get_metrics(request: Request):
     """Retrieve dynamic ticket metrics from database."""
     try:
@@ -370,11 +475,18 @@ async def get_metrics(request: Request):
         return {"success": True, "metrics": db.get_metrics()}
     except HTTPException:
         raise
+=======
+async def get_metrics():
+    """Retrieve dynamic ticket metrics from database."""
+    try:
+        return {"success": True, "metrics": db.get_metrics()}
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.get("/api/predictive-warnings")
+<<<<<<< HEAD
 async def get_predictive_warnings(request: Request, threshold: int = 4):
     """Retrieve predictive maintenance warnings for 30-day grouped tickets."""
     try:
@@ -383,6 +495,13 @@ async def get_predictive_warnings(request: Request, threshold: int = 4):
         return {"success": True, "threshold": threshold, "warnings": warnings}
     except HTTPException:
         raise
+=======
+async def get_predictive_warnings(threshold: int = 4):
+    """Retrieve predictive maintenance warnings for 30-day grouped tickets."""
+    try:
+        warnings = db.get_predictive_warnings(threshold=threshold)
+        return {"success": True, "threshold": threshold, "warnings": warnings}
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -390,6 +509,7 @@ async def get_predictive_warnings(request: Request, threshold: int = 4):
 
 
 @app.get("/api/predictive-patterns")
+<<<<<<< HEAD
 async def get_predictive_patterns(request: Request, threshold: int = 4):
     """Retrieve detailed recurring patterns with correlated tickets."""
     try:
@@ -398,6 +518,13 @@ async def get_predictive_patterns(request: Request, threshold: int = 4):
         return {"success": True, "patterns": patterns}
     except HTTPException:
         raise
+=======
+async def get_predictive_patterns(threshold: int = 4):
+    """Retrieve detailed recurring patterns with correlated tickets."""
+    try:
+        patterns = db.get_predictive_patterns(threshold=threshold)
+        return {"success": True, "patterns": patterns}
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -405,6 +532,7 @@ async def get_predictive_patterns(request: Request, threshold: int = 4):
 
 
 @app.get("/api/hotspots")
+<<<<<<< HEAD
 async def get_hotspots(request: Request):
     """Retrieve the Block x Category cross-tabulation matrix."""
     try:
@@ -412,11 +540,18 @@ async def get_hotspots(request: Request):
         return {"success": True, "data": db.get_hotspot_matrix()}
     except HTTPException:
         raise
+=======
+async def get_hotspots():
+    """Retrieve the Block x Category cross-tabulation matrix."""
+    try:
+        return {"success": True, "data": db.get_hotspot_matrix()}
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.get("/api/block-counts")
+<<<<<<< HEAD
 async def get_block_counts(request: Request):
     """Retrieve issue distribution by block."""
     try:
@@ -424,11 +559,18 @@ async def get_block_counts(request: Request):
         return {"success": True, "counts": db.get_block_issue_counts()}
     except HTTPException:
         raise
+=======
+async def get_block_counts():
+    """Retrieve issue distribution by block."""
+    try:
+        return {"success": True, "counts": db.get_block_issue_counts()}
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.get("/api/analytics")
+<<<<<<< HEAD
 async def get_analytics(request: Request):
     """Retrieve full analytics charts data from database."""
     try:
@@ -436,19 +578,31 @@ async def get_analytics(request: Request):
         return {"success": True, "analytics": db.get_analytics_data()}
     except HTTPException:
         raise
+=======
+async def get_analytics():
+    """Retrieve full analytics charts data from database."""
+    try:
+        return {"success": True, "analytics": db.get_analytics_data()}
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.get("/api/check-duplicate")
 async def check_duplicate(
+<<<<<<< HEAD
     request: Request,
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     block: str = Query(...),
     room: str = Query(...),
     category: str = Query(...),
 ):
     """Check if an open ticket exists for duplicate detection preview."""
+<<<<<<< HEAD
     require_user(request, "student")
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     match = db.check_duplicate_open_ticket(block, room, category)
     return {
         "exists": match is not None,
@@ -458,7 +612,10 @@ async def check_duplicate(
 
 @app.post("/api/analyze-image")
 async def analyze_image(
+<<<<<<< HEAD
     request: Request,
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     file: Optional[UploadFile] = File(None),
 ):
     """Analyze image using real AI vision service.
@@ -466,7 +623,10 @@ async def analyze_image(
     If unconfigured, returns clean configuration error.
     Never returns fake data.
     """
+<<<<<<< HEAD
     require_user(request, "student")
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     if not file:
         raise HTTPException(status_code=400, detail="An image file is required for analysis.")
 
@@ -486,8 +646,11 @@ async def analyze_image(
     try:
         analysis = ai_service.analyze_image_with_ai(image_bytes, mime_type)
         return {"success": True, "analysis": analysis}
+<<<<<<< HEAD
     except HTTPException:
         raise
+=======
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     except ValueError as e:
         # Expected unconfigured credentials error
         return JSONResponse(
@@ -510,6 +673,7 @@ async def analyze_image(
 
 
 @app.post("/api/tickets/{ticket_id}/review")
+<<<<<<< HEAD
 async def submit_review(ticket_id: int, review: ReviewCreate, request: Request):
     """Submit resident resolution feedback for a resolved ticket."""
     user = require_user(request, "student")
@@ -523,6 +687,16 @@ async def submit_review(ticket_id: int, review: ReviewCreate, request: Request):
         return {"success": True, "review_id": review_id}
     except HTTPException:
         raise
+=======
+async def submit_review(ticket_id: int, review: ReviewCreate):
+    """Submit resident resolution feedback for a resolved ticket."""
+    ticket = db.get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail=f"Ticket #{ticket_id} not found.")
+    try:
+        review_id = db.add_ticket_review(ticket_id, review.rating, review.comment or "")
+        return {"success": True, "review_id": review_id}
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -530,9 +704,14 @@ async def submit_review(ticket_id: int, review: ReviewCreate, request: Request):
 
 
 @app.get("/api/config")
+<<<<<<< HEAD
 async def get_config(request: Request):
     """Retrieve platform configuration details."""
     require_user(request)
+=======
+async def get_config():
+    """Retrieve platform configuration details."""
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     threshold = int(os.getenv("PREDICTIVE_THRESHOLD", "4"))
     return {
         "security_contact": ai_service.get_security_contact(),
@@ -546,9 +725,14 @@ async def get_config(request: Request):
 
 
 @app.post("/api/config")
+<<<<<<< HEAD
 async def update_config(config: ConfigUpdate, request: Request):
     """Update settings in-memory and write to .env."""
     require_user(request, "admin")
+=======
+async def update_config(config: ConfigUpdate):
+    """Update settings in-memory and write to .env."""
+>>>>>>> 9c5127969abfec502d1281d3caff21d23119c9fc
     env_path = BASE_DIR / ".env"
     existing_lines = []
     if env_path.exists():
