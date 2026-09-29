@@ -22,10 +22,11 @@ rad.json
 #Test results file
 TestResults.xml
 
-# Python
+# Python and local app data
 __pycache__/
 *.py[cod]
 *$py.class
 *.db
 uploads/
-.env
+.env
+*.env

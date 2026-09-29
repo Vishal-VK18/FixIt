@@ -1,197 +1,601 @@
-"""FixIt Campus Maintenance System - Main Streamlit Application Entrypoint.
+"""CampusCare Maintenance Platform - Full-stack FastAPI application."""
 
-Coordinates navigation between Student Reporting, Ticket Tracking,
-and Campus Safety guidelines.
-"""
+import os
+from pathlib import Path
+from typing import Optional
 
-import streamlit as st
+from dotenv import load_dotenv
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from starlette.middleware.sessions import SessionMiddleware
+import secrets
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
-import auth
-import config
-import database
-import report_page
+import ai_service
+import db
+import auth_service
 
-# Configure application metadata
-st.set_page_config(
-    page_title="FixIt - Campus Facility Maintenance",
-    page_icon="🔧",
-    layout="wide",
-    initial_sidebar_state="expanded",
+load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+TEMPLATES_DIR = BASE_DIR / "templates"
+
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+
+# Ensure database is initialized on startup
+db.init_db()
+
+app = FastAPI(
+    title="CampusCare Maintenance Platform",
+    description="Real campus maintenance and issue reporting platform with AI diagnostics.",
+    version="1.0.0",
 )
 
-# Custom CSS styling for accessible, modern campus portal UI
-st.markdown(
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET") or secrets.token_urlsafe(32),
+                   session_cookie="campuscare_session", max_age=60 * 60 * 8, same_site="lax", https_only=False)
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+class TicketCreate(BaseModel):
+    issue: str = Field(..., min_length=3)
+    category: str
+    priority: str
+    department: Optional[str] = None
+    suggested_fix: Optional[str] = None
+    block: str
+    room: str
+
+
+class TicketStatusUpdate(BaseModel):
+    status: str
+
+
+class ReviewCreate(BaseModel):
+    rating: int = Field(..., ge=1, le=5)
+    comment: Optional[str] = ""
+
+
+class ConfigUpdate(BaseModel):
+    security_contact: Optional[str] = None
+    openai_key: Optional[str] = None
+    gemini_key: Optional[str] = None
+    threshold: Optional[int] = None
+
+
+class StudentRegistration(BaseModel):
+    name: str
+    student_id: str
+    email: str
+    password: str
+    confirm_password: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+def current_user(request: Request) -> dict | None:
+    user_id = request.session.get("user_id")
+    return auth_service.get_user(int(user_id)) if user_id else None
+
+
+def require_user(request: Request, role: str | None = None) -> dict:
+    user = current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if role and user["role"] != role:
+        raise HTTPException(status_code=403, detail="Admin access required." if role == "admin" else "Please use the correct login portal for this account.")
+    return user
+
+
+def protected_page(request: Request, role: str) -> HTMLResponse | RedirectResponse:
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/admin-login" if role == "admin" else "/student-login", status_code=303)
+    if user["role"] != role:
+        return RedirectResponse("/admin-login" if role == "admin" else "/student-login", status_code=303)
+    return _render_index("report-issue" if role == "student" else "maintenance-dashboard")
+
+
+# -------------------------------------------------------------
+# Frontend Routes
+# -------------------------------------------------------------
+
+def _render_index(initial_view: str = "report-issue") -> HTMLResponse:
+    index_file = TEMPLATES_DIR / "index.html"
+    if not index_file.exists():
+        return HTMLResponse("<h1>CampusCare UI template missing</h1>", status_code=500)
+    content = index_file.read_text(encoding="utf-8")
+    content = content.replace("{{INITIAL_VIEW}}", initial_view)
+    return HTMLResponse(content)
+
+
+@app.get("/", response_class=HTMLResponse)
+async def route_root(request: Request):
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/student-login", status_code=303)
+    return protected_page(request, user["role"])
+
+
+def _auth_page(kind: str) -> HTMLResponse:
+    path = TEMPLATES_DIR / "auth.html"
+    content = path.read_text(encoding="utf-8").replace("{{AUTH_KIND}}", kind)
+    return HTMLResponse(content)
+
+
+@app.get("/student-login", response_class=HTMLResponse)
+async def student_login_page():
+    return _auth_page("student-login")
+
+
+@app.get("/student-register", response_class=HTMLResponse)
+async def student_register_page():
+    return _auth_page("student-register")
+
+
+@app.get("/admin-login", response_class=HTMLResponse)
+async def admin_login_page():
+    return _auth_page("admin-login")
+
+
+@app.get("/report-issue", response_class=HTMLResponse)
+async def route_report_issue(request: Request):
+    return protected_page(request, "student")
+
+
+@app.get("/student-dashboard", response_class=HTMLResponse)
+async def route_student_dashboard(request: Request):
+    return protected_page(request, "student")
+
+
+@app.get("/student", response_class=HTMLResponse)
+async def route_student(request: Request):
+    return protected_page(request, "student")
+
+
+@app.get("/report", response_class=HTMLResponse)
+async def route_report_alias(request: Request):
+    page = protected_page(request, "student")
+    return page if isinstance(page, RedirectResponse) else _render_index("report-issue")
+
+
+@app.get("/my-reports", response_class=HTMLResponse)
+async def route_my_reports(request: Request):
+    page = protected_page(request, "student")
+    return page if isinstance(page, RedirectResponse) else _render_index("my-reports")
+
+
+@app.get("/maintenance-dashboard", response_class=HTMLResponse)
+async def route_maintenance_dashboard(request: Request):
+    return protected_page(request, "admin")
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def route_admin(request: Request):
+    return protected_page(request, "admin")
+
+
+@app.get("/admin/dashboard", response_class=HTMLResponse)
+async def route_admin_dashboard(request: Request):
+    return protected_page(request, "admin")
+
+
+@app.get("/admin/tickets", response_class=HTMLResponse)
+async def route_admin_tickets(request: Request):
+    page = protected_page(request, "admin")
+    return page if isinstance(page, RedirectResponse) else _render_index("maintenance-tickets")
+
+
+@app.get("/admin/analytics", response_class=HTMLResponse)
+async def route_admin_analytics(request: Request):
+    page = protected_page(request, "admin")
+    return page if isinstance(page, RedirectResponse) else _render_index("analytics")
+
+
+@app.get("/admin/predictive-maintenance", response_class=HTMLResponse)
+async def route_admin_predictive(request: Request):
+    page = protected_page(request, "admin")
+    return page if isinstance(page, RedirectResponse) else _render_index("predictive-maintenance")
+
+
+@app.get("/predictive-maintenance", response_class=HTMLResponse)
+async def route_predictive_maintenance(request: Request):
+    page = protected_page(request, "admin")
+    return page if isinstance(page, RedirectResponse) else _render_index("predictive-maintenance")
+
+
+@app.get("/maintenance-tickets", response_class=HTMLResponse)
+async def route_maintenance_tickets(request: Request):
+    page = protected_page(request, "admin")
+    return page if isinstance(page, RedirectResponse) else _render_index("maintenance-tickets")
+
+
+@app.get("/analytics", response_class=HTMLResponse)
+async def route_analytics(request: Request):
+    page = protected_page(request, "admin")
+    return page if isinstance(page, RedirectResponse) else _render_index("analytics")
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def route_settings(request: Request):
+    page = protected_page(request, "admin")
+    return page if isinstance(page, RedirectResponse) else _render_index("settings")
+
+
+# -------------------------------------------------------------
+# REST API Endpoints
+# -------------------------------------------------------------
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request):
+    user = current_user(request)
+    return {"authenticated": bool(user), "user": user}
+
+
+@app.post("/api/auth/register")
+async def register_student(body: StudentRegistration, request: Request):
+    if body.password != body.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
+    try:
+        user = auth_service.create_user(body.name, body.email, body.password, "student", body.student_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    request.session.clear()
+    request.session["user_id"] = user["id"]
+    return {"success": True, "user": user}
+
+
+@app.post("/api/auth/login/{portal}")
+async def login(portal: str, body: LoginRequest, request: Request):
+    role = "student" if portal == "student" else "admin" if portal == "admin" else None
+    if not role:
+        raise HTTPException(status_code=404, detail="Login portal not found.")
+    user = auth_service.authenticate(body.email, body.password, role)
+    if not user:
+        # Keep credential and wrong-role failures deliberately indistinguishable.
+        raise HTTPException(status_code=401, detail="Invalid email or password. Please use the correct login portal for this account.")
+    request.session.clear()
+    request.session["user_id"] = user["id"]
+    return {"success": True, "user": user, "redirect": "/student-dashboard" if role == "student" else "/maintenance-dashboard"}
+
+
+@app.post("/api/auth/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return {"success": True}
+
+@app.post("/api/tickets")
+async def create_ticket(ticket: TicketCreate, request: Request):
+    """Submit a ticket. Adheres to shared ticket contract returning (ticket_id, merged)."""
+    try:
+        user = require_user(request, "student")
+        payload = ticket.model_dump()
+        payload.update({"user_id": user["id"], "student_id": user.get("student_id"), "student_name": user["name"]})
+        ticket_id, merged = db.add_ticket(payload)
+        saved_ticket = db.get_ticket(ticket_id)
+        return {
+            "success": True,
+            "ticket_id": ticket_id,
+            "merged": merged,
+            "ticket": saved_ticket,
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@app.get("/api/tickets")
+async def list_tickets(
+    request: Request,
+    status: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    block: Optional[str] = Query(None),
+    priority: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    sort_by: str = Query("priority"),
+):
+    """Retrieve tickets with search, filtering, and priority sorting."""
+    try:
+        user = require_user(request)
+        tickets = db.get_tickets(
+            status=status,
+            category=category,
+            block=block,
+            priority=priority,
+            search=search,
+            sort_by=sort_by,
+            user_id=user["id"] if user["role"] == "student" else None,
+        )
+        return {"success": True, "count": len(tickets), "tickets": tickets}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@app.get("/api/tickets/{ticket_id}")
+async def get_ticket_details(ticket_id: int, request: Request):
+    """Retrieve detailed information for a single ticket."""
+    user = require_user(request)
+    ticket = db.get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail=f"Ticket #{ticket_id} not found.")
+    if user["role"] == "student" and ticket.get("user_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only access your own reports.")
+    return {"success": True, "ticket": ticket}
+
+
+@app.patch("/api/tickets/{ticket_id}/status")
+async def update_status(ticket_id: int, body: TicketStatusUpdate, request: Request):
+    """Update ticket status and refresh updated_at."""
+    try:
+        require_user(request, "admin")
+        success = db.update_ticket_status(ticket_id, body.status)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Ticket #{ticket_id} not found.")
+        updated_ticket = db.get_ticket(ticket_id)
+        return {"success": True, "ticket": updated_ticket}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@app.get("/api/metrics")
+async def get_metrics(request: Request):
+    """Retrieve dynamic ticket metrics from database."""
+    try:
+        require_user(request, "admin")
+        return {"success": True, "metrics": db.get_metrics()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@app.get("/api/predictive-warnings")
+async def get_predictive_warnings(request: Request, threshold: int = 4):
+    """Retrieve predictive maintenance warnings for 30-day grouped tickets."""
+    try:
+        require_user(request, "admin")
+        warnings = db.get_predictive_warnings(threshold=threshold)
+        return {"success": True, "threshold": threshold, "warnings": warnings}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@app.get("/api/predictive-patterns")
+async def get_predictive_patterns(request: Request, threshold: int = 4):
+    """Retrieve detailed recurring patterns with correlated tickets."""
+    try:
+        require_user(request, "admin")
+        patterns = db.get_predictive_patterns(threshold=threshold)
+        return {"success": True, "patterns": patterns}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@app.get("/api/hotspots")
+async def get_hotspots(request: Request):
+    """Retrieve the Block x Category cross-tabulation matrix."""
+    try:
+        require_user(request, "admin")
+        return {"success": True, "data": db.get_hotspot_matrix()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@app.get("/api/block-counts")
+async def get_block_counts(request: Request):
+    """Retrieve issue distribution by block."""
+    try:
+        require_user(request, "admin")
+        return {"success": True, "counts": db.get_block_issue_counts()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@app.get("/api/analytics")
+async def get_analytics(request: Request):
+    """Retrieve full analytics charts data from database."""
+    try:
+        require_user(request, "admin")
+        return {"success": True, "analytics": db.get_analytics_data()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@app.get("/api/check-duplicate")
+async def check_duplicate(
+    request: Request,
+    block: str = Query(...),
+    room: str = Query(...),
+    category: str = Query(...),
+):
+    """Check if an open ticket exists for duplicate detection preview."""
+    require_user(request, "student")
+    match = db.check_duplicate_open_ticket(block, room, category)
+    return {
+        "exists": match is not None,
+        "existing_ticket": match,
+    }
+
+
+@app.post("/api/analyze-image")
+async def analyze_image(
+    request: Request,
+    file: Optional[UploadFile] = File(None),
+):
+    """Analyze image using real AI vision service.
+    
+    If unconfigured, returns clean configuration error.
+    Never returns fake data.
     """
-    <style>
-    /* Main container clean spacing */
-    .block-container {
-        padding-top: 2rem;
-        padding-bottom: 3rem;
-        max-width: 1000px;
-    }
-    /* Buttons */
-    div.stButton > button:first-child {
-        border-radius: 8px;
-        font-weight: 600;
-        padding: 0.5rem 1.25rem;
-    }
-    /* Sidebar header */
-    .sidebar-brand {
-        font-size: 1.5rem;
-        font-weight: 800;
-        color: #0f172a;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 0.5rem;
-    }
-    .sidebar-sub {
-        font-size: 0.85rem;
-        color: #64748b;
-        margin-bottom: 1.5rem;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+    require_user(request, "student")
+    if not file:
+        raise HTTPException(status_code=400, detail="An image file is required for analysis.")
 
+    # Validate mime type
+    mime_type = file.content_type or "image/jpeg"
+    if not mime_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be a valid image format.")
 
-def render_sidebar() -> str:
-    """Render sidebar navigation and student session details."""
-    with st.sidebar:
-        st.markdown(
-            """
-            <div class="sidebar-brand">🔧 FixIt Campus</div>
-            <div class="sidebar-sub">AI-Powered Facility & Maintenance Hub</div>
-            """,
-            unsafe_allow_html=True,
+    image_bytes = await file.read()
+    if len(image_bytes) == 0:
+        raise HTTPException(status_code=400, detail="The selected image file is empty.")
+
+    # Limit file size to 10MB
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image file exceeds maximum 10MB limit.")
+
+    try:
+        analysis = ai_service.analyze_image_with_ai(image_bytes, mime_type)
+        return {"success": True, "analysis": analysis}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        # Expected unconfigured credentials error
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "configured": False,
+                "error": str(e),
+            },
         )
-
-        user = auth.get_current_user()
-
-        with st.expander("👤 Student Profile", expanded=False):
-            new_id = st.text_input("Student ID", value=user["student_id"])
-            new_name = st.text_input("Full Name", value=user["name"])
-            if st.button("Update Profile"):
-                auth.set_current_user(new_id, new_name)
-                st.success("Profile updated!")
-                st.rerun()
-
-        st.markdown("---")
-
-        page = st.radio(
-            "Navigation",
-            options=["Report Issue", "Track My Tickets", "Safety & Contacts"],
-            index=0,
-        )
-
-        st.markdown("---")
-        st.markdown(
-            f"""
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
-                <span style="font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase;">Campus Security</span>
-                <div style="font-size: 14px; font-weight: 800; color: #b91c1c; margin-top: 4px;">
-                    📞 {config.SECURITY_CONTACT_NUMBER}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        return page
-
-
-def render_ticket_tracker() -> None:
-    """Render ticket tracker view showing submitted issues, status, and duplicates."""
-    st.markdown(
-        """
-        <div style="margin-bottom: 24px;">
-            <h1 style="font-weight: 800; color: #1e293b;">📋 Maintenance Tickets</h1>
-            <p style="color: #64748b; font-size: 16px;">Track your submitted requests and monitor duplicate reports.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    tickets = database.get_recent_tickets(limit=50)
-
-    if not tickets:
-        st.info("No maintenance tickets have been submitted yet.")
-        return
-
-    for t in tickets:
-        p_badge = report_page.render_priority_badge(t["priority"])
-        is_emerg = bool(t["is_emergency"])
-        border_color = "#ef4444" if is_emerg else "#e2e8f0"
-
-        st.markdown(
-            f"""
-            <div style="
-                background: white;
-                border: 1px solid {border_color};
-                border-left: 5px solid {'#ef4444' if is_emerg else '#3b82f6'};
-                border-radius: 8px;
-                padding: 16px;
-                margin-bottom: 12px;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-            ">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <div>
-                        <span style="font-weight: 800; font-size: 16px; color: #0f172a;">#{t['ticket_ref']}</span>
-                        <span style="color: #64748b; font-size: 14px; margin-left: 8px;">({t['block']} - {t['room']})</span>
-                    </div>
-                    <div>
-                        {p_badge}
-                    </div>
-                </div>
-                <div style="font-size: 15px; font-weight: 600; color: #334155; margin-bottom: 6px;">
-                    {t['issue']}
-                </div>
-                <div style="display: flex; gap: 16px; font-size: 13px; color: #64748b;">
-                    <span>🏢 <strong>Department:</strong> {t['department']}</span>
-                    <span>📊 <strong>Status:</strong> {t['status']}</span>
-                    <span>📑 <strong>Merged Reports:</strong> {t['duplicate_count']}</span>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "configured": True,
+                "error": f"AI service error: {str(e)}",
+            },
         )
 
 
-def render_safety_page() -> None:
-    """Render campus safety guidelines and emergency directory."""
-    st.markdown(
-        """
-        <div style="margin-bottom: 24px;">
-            <h1 style="font-weight: 800; color: #b91c1c;">🚨 Campus Safety & Emergency</h1>
-            <p style="color: #64748b; font-size: 16px;">Critical protocols for electrical, structural, and flooding emergencies.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    report_page.render_emergency_alert()
-
-    st.markdown(
-        """
-        ### What to do during a facility hazard:
-        1. **Electrical Sparks / Fire**: Clear the immediate area, do not touch electrical switches or exposed wiring, and notify campus security immediately.
-        2. **Severe Flooding**: Avoid stepping into standing water near electrical sockets or power points to prevent electrocution.
-        3. **Structural / Civil Damage**: Vacate the room if ceiling plaster or heavy fixtures are loose.
-        """
-    )
+@app.post("/api/tickets/{ticket_id}/review")
+async def submit_review(ticket_id: int, review: ReviewCreate, request: Request):
+    """Submit resident resolution feedback for a resolved ticket."""
+    user = require_user(request, "student")
+    ticket = db.get_ticket(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail=f"Ticket #{ticket_id} not found.")
+    if ticket.get("user_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="You can only review your own reports.")
+    try:
+        review_id = db.add_ticket_review(ticket_id, review.rating, review.comment or "")
+        return {"success": True, "review_id": review_id}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-def main() -> None:
-    page = render_sidebar()
+@app.get("/api/config")
+async def get_config(request: Request):
+    """Retrieve platform configuration details."""
+    require_user(request)
+    threshold = int(os.getenv("PREDICTIVE_THRESHOLD", "4"))
+    return {
+        "security_contact": ai_service.get_security_contact(),
+        "ai_configured": ai_service.is_ai_configured(),
+        "predictive_threshold": threshold,
+        "blocks": list(db.BLOCKS),
+        "categories": list(db.CATEGORIES),
+        "priorities": list(db.PRIORITIES),
+        "statuses": list(db.STATUSES),
+    }
 
-    if page == "Report Issue":
-        report_page.render_report_page()
-    elif page == "Track My Tickets":
-        render_ticket_tracker()
-    elif page == "Safety & Contacts":
-        render_safety_page()
+
+@app.post("/api/config")
+async def update_config(config: ConfigUpdate, request: Request):
+    """Update settings in-memory and write to .env."""
+    require_user(request, "admin")
+    env_path = BASE_DIR / ".env"
+    existing_lines = []
+    if env_path.exists():
+        existing_lines = env_path.read_text(encoding="utf-8").splitlines()
+
+    env_dict = {}
+    for line in existing_lines:
+        line_clean = line.strip()
+        if line_clean and not line_clean.startswith("#") and "=" in line_clean:
+            k, v = line_clean.split("=", 1)
+            env_dict[k.strip()] = v.strip()
+
+    if config.security_contact is not None:
+        os.environ["SECURITY_CONTACT_NUMBER"] = config.security_contact.strip()
+        env_dict["SECURITY_CONTACT_NUMBER"] = config.security_contact.strip()
+
+    if config.openai_key is not None:
+        os.environ["OPENAI_API_KEY"] = config.openai_key.strip()
+        env_dict["OPENAI_API_KEY"] = config.openai_key.strip()
+
+    if config.gemini_key is not None:
+        os.environ["GEMINI_API_KEY"] = config.gemini_key.strip()
+        env_dict["GEMINI_API_KEY"] = config.gemini_key.strip()
+
+    if config.threshold is not None and config.threshold >= 1:
+        os.environ["PREDICTIVE_THRESHOLD"] = str(config.threshold)
+        env_dict["PREDICTIVE_THRESHOLD"] = str(config.threshold)
+
+    # Write back to .env
+    output_lines = [f"{k}={v}" for k, v in env_dict.items()]
+    env_path.write_text("\n".join(output_lines) + "\n", encoding="utf-8")
+
+    return {
+        "success": True,
+        "config": {
+            "security_contact": ai_service.get_security_contact(),
+            "ai_configured": ai_service.is_ai_configured(),
+            "predictive_threshold": int(os.getenv("PREDICTIVE_THRESHOLD", "4")),
+        },
+    }
 
 
 if __name__ == "__main__":
-    main()
+    import uvicorn
+
+    port = int(os.getenv("PORT", "8000"))
+    host = os.getenv("HOST", "0.0.0.0")
+    print(f"Starting CampusCare Maintenance Platform on http://{host}:{port} ...")
+    uvicorn.run("app:app", host=host, port=port, reload=True)
+
