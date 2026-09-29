@@ -1,11 +1,11 @@
-"""Comprehensive Automated Test Suite for Person 1: AI Vision Analysis + Student Reporting.
+﻿"""Comprehensive Automated Test Suite for Person 1: AI Vision Analysis + Student Reporting.
 
 Tests all required scenarios from Section 16:
 - Test 1: Normal issue (Broken chair -> Furniture, MEDIUM, is_emergency=False)
 - Test 2: Cosmetic issue (Peeling paint -> Civil, LOW, is_emergency=False)
 - Test 3: Electrical emergency (Sparking electrical panel -> Electrical, CRITICAL, is_emergency=True)
 - Test 4: Flooding (Severe water flooding -> priority=CRITICAL, is_emergency=True)
-- Test 5: API failure (Simulate failure -> safe fallback, no crash)
+- Test 5: API failure (provider failure is surfaced, never replaced with fake analysis)
 - Test 6: Duplicate report (Matches unresolved ticket -> merged, duplicate count incremented)
 - Test 7: New ticket (Unique issue -> new ticket created with ticket_ref)
 - Emergency overrides & department mapping tests
@@ -35,6 +35,19 @@ def create_dummy_image(text_hint: str = "") -> bytes:
     return buf.getvalue()
 
 
+def analyze_with_mock(issue: str, category: str, priority: str, suggested_fix: str, is_emergency: bool = False) -> dict:
+    result = {
+        "issue": issue,
+        "category": category,
+        "priority": priority,
+        "department": config.DEPARTMENT_MAP[category],
+        "suggested_fix": suggested_fix,
+        "is_emergency": is_emergency,
+    }
+    with patch("vision.config.GEMINI_API_KEY", "test-key"), patch("vision._call_gemini_vision", return_value=result):
+        return vision.analyze_image(create_dummy_image())
+
+
 class TestPerson1VisionAndReporting(unittest.TestCase):
     def setUp(self):
         # Use an in-memory or temporary database for testing
@@ -55,12 +68,11 @@ class TestPerson1VisionAndReporting(unittest.TestCase):
                 pass
 
     # =========================================================================
-    # Test 1 — Normal issue: Broken chair
+    # Test 1 â€” Normal issue: Broken chair
     # Expected: category = Furniture, priority = MEDIUM, is_emergency = false
     # =========================================================================
     def test_01_normal_issue_broken_chair(self):
-        img_bytes = create_dummy_image("broken chair with unstable leg")
-        result = vision.analyze_image(img_bytes)
+        result = analyze_with_mock("Broken chair with unstable leg", "Furniture", "MEDIUM", "Replace the damaged leg.")
 
         self.assertEqual(result["category"], "Furniture")
         self.assertEqual(result["priority"], "MEDIUM")
@@ -70,12 +82,11 @@ class TestPerson1VisionAndReporting(unittest.TestCase):
         self.assertTrue(len(result["suggested_fix"]) > 0)
 
     # =========================================================================
-    # Test 2 — Cosmetic issue: Peeling paint
+    # Test 2 â€” Cosmetic issue: Peeling paint
     # Expected: category = Civil, priority = LOW, is_emergency = false
     # =========================================================================
     def test_02_cosmetic_issue_peeling_paint(self):
-        img_bytes = create_dummy_image("peeling paint on wall")
-        result = vision.analyze_image(img_bytes)
+        result = analyze_with_mock("Peeling paint on wall", "Civil", "LOW", "Prepare and repaint the wall.")
 
         self.assertEqual(result["category"], "Civil")
         self.assertEqual(result["priority"], "LOW")
@@ -83,12 +94,11 @@ class TestPerson1VisionAndReporting(unittest.TestCase):
         self.assertEqual(result["department"], "Civil Department")
 
     # =========================================================================
-    # Test 3 — Electrical emergency: Sparking electrical panel
+    # Test 3 â€” Electrical emergency: Sparking electrical panel
     # Expected: category = Electrical, priority = CRITICAL, is_emergency = true
     # =========================================================================
     def test_03_electrical_emergency_sparking_panel(self):
-        img_bytes = create_dummy_image("sparking electrical panel with electrical arcing")
-        result = vision.analyze_image(img_bytes)
+        result = analyze_with_mock("Sparking electrical panel", "Electrical", "CRITICAL", "Isolate power and inspect the panel.", True)
 
         self.assertEqual(result["category"], "Electrical")
         self.assertEqual(result["priority"], "CRITICAL")
@@ -96,44 +106,30 @@ class TestPerson1VisionAndReporting(unittest.TestCase):
         self.assertEqual(result["department"], "Electrical Department")
 
     # =========================================================================
-    # Test 4 — Flooding: Severe water flooding
+    # Test 4 â€” Flooding: Severe water flooding
     # Expected: priority = CRITICAL, is_emergency = true
     # =========================================================================
     def test_04_flooding_emergency(self):
-        img_bytes = create_dummy_image("severe water flooding across corridor")
-        result = vision.analyze_image(img_bytes)
+        result = analyze_with_mock("Severe flooding near power", "Plumbing", "CRITICAL", "Isolate power and stop the leak.", True)
 
         self.assertEqual(result["priority"], "CRITICAL")
         self.assertTrue(result["is_emergency"])
         self.assertIn("Department", result["department"])
 
     # =========================================================================
-    # Test 5 — API failure simulation
-    # Expected: Application does not crash, valid fallback result is returned
+    # Test 5 â€” API failure simulation
+    # Expected: provider failures are surfaced instead of fabricated results
     # =========================================================================
     def test_05_api_failure_handling(self):
         img_bytes = create_dummy_image("any photo")
 
-        with patch("vision._offline_heuristic_analysis", return_value=None):
-            with patch("vision._call_gemini_vision", side_effect=Exception("API Timeout / Network Down")):
-                with patch("vision._call_openai_vision", side_effect=Exception("API Key Invalid")):
-                    result = vision.analyze_image(img_bytes)
-
-                    # Should not raise exception, must return valid fallback structure
-                    self.assertIsInstance(result, dict)
-                    self.assertIn("issue", result)
-                    self.assertIn("category", result)
-                    self.assertIn("priority", result)
-                    self.assertIn("department", result)
-                    self.assertIn("suggested_fix", result)
-                    self.assertIn("is_emergency", result)
-                    self.assertEqual(result["category"], "Other")
-                    self.assertEqual(result["priority"], "MEDIUM")
-                    self.assertFalse(result["is_emergency"])
-                    self.assertEqual(result["department"], "General Maintenance")
+        with patch("vision.config.GEMINI_API_KEY", "test-key"):
+            with patch("vision._call_gemini_vision", side_effect=RuntimeError("API Timeout / Network Down")):
+                with self.assertRaises(RuntimeError):
+                    vision.analyze_image(img_bytes)
 
     # =========================================================================
-    # Test 6 & 7 — New Ticket Creation & Duplicate Report Detection
+    # Test 6 & 7 â€” New Ticket Creation & Duplicate Report Detection
     # Expected:
     # - New ticket is created with unique ticket_ref
     # - Duplicate report in same block, room, and category is merged

@@ -1,13 +1,14 @@
-/**
+﻿/**
  * CampusCare Maintenance Platform - Frontend Controller
  * Connects Stitch UI directly to persistent SQLite backend and AI APIs.
  */
 
 // Global Application State
 const state = {
-  currentRole: localStorage.getItem("campuscare_role") || "student",
+  currentRole: "student",
   currentView: "report-issue",
   selectedImageFile: null,
+  isEmergency: false,
   cameraStream: null,
   tickets: [],
   selectedTicketId: null,
@@ -20,10 +21,26 @@ const state = {
   activeHotspotFilter: null,
 };
 
+const escapeHTML = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+
 // ====================================================================
 // INITIALIZATION
 // ====================================================================
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  let session;
+  try {
+    const response = await fetch("/api/auth/me");
+    if (!response.ok) {
+      const next = `${location.pathname}${location.search}`;
+      location.replace(`/login?next=${encodeURIComponent(next)}`);
+      return;
+    }
+    session = (await response.json()).user;
+  } catch {
+    location.replace("/login");
+    return;
+  }
+  state.currentRole = session.role;
   initMobileSidebar();
   initDragAndDrop();
   initFileInput();
@@ -32,7 +49,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Route from server template or url path
   const initial = window.INITIAL_VIEW || window.location.pathname.replace("/", "") || "report-issue";
-  setAppRole(state.currentRole, false);
+  setAppRole(state.currentRole, false, session);
+  document.getElementById("logout-btn")?.addEventListener("click", logout);
   navigateTo(initial, false);
 
   // Poll duplicate check on report issue
@@ -51,7 +69,7 @@ window.addEventListener("popstate", (e) => {
 // ====================================================================
 async function loadPlatformConfig() {
   try {
-    const res = await fetch("/api/config");
+    const res = await fetch("/api/app-config");
     if (!res.ok) return;
     const data = await res.json();
     state.platformConfig = data;
@@ -61,6 +79,8 @@ async function loadPlatformConfig() {
     const secText = document.getElementById("security-call-text");
     const settingSecInput = document.getElementById("setting-security-contact");
     const settingThreshInput = document.getElementById("setting-threshold");
+    const aiPill = document.getElementById("ai-vision-pill");
+    if (aiPill) aiPill.lastChild.textContent = data.ai_configured ? "AI Analysis Configured" : "AI Analysis Not Configured";
 
     if (data.security_contact) {
       if (secLink) secLink.href = `tel:${data.security_contact.replace(/[^0-9+]/g, "")}`;
@@ -75,9 +95,11 @@ async function loadPlatformConfig() {
     if (settingThreshInput) {
       settingThreshInput.value = data.predictive_threshold || 4;
     }
+    const predictiveThreshold = document.getElementById("pred-metric-threshold");
+    if (predictiveThreshold) predictiveThreshold.textContent = data.predictive_threshold || 4;
 
     // Populate Notifications dropdown
-    populateNotificationsMenu();
+    if (state.currentRole === "admin") populateNotificationsMenu();
   } catch (err) {
     console.error("Could not load platform configuration:", err);
   }
@@ -87,24 +109,27 @@ function populateNotificationsMenu() {
   const container = document.getElementById("notifications-list");
   if (!container) return;
 
-  const notifications = [
-    { icon: "bolt", title: "Block C Inspection Trigger", text: "Recurring electrical alerts detected in Rooms 201-206", time: "Just now" },
-    { icon: "schedule", title: "Dispatch SLA Status", text: "84% tickets on-schedule for active shifts", time: "15m ago" },
-    { icon: "info", title: "Facilities Monitoring", text: "Continuous sensor uplink active across 5 campus wings", time: "1h ago" },
-  ];
-
-  container.innerHTML = notifications.map(n => `
-    <div class="flex items-start gap-2.5 p-2 rounded-lg hover:bg-surface-container transition-colors cursor-pointer">
-      <div class="w-7 h-7 rounded-lg bg-surface-container-high text-primary flex items-center justify-center shrink-0">
-        <span class="material-symbols-outlined text-[16px]">${n.icon}</span>
-      </div>
-      <div class="flex-1 min-w-0">
-        <span class="text-xs font-semibold text-on-surface block truncate">${n.title}</span>
-        <span class="text-[11px] text-on-surface-variant block truncate">${n.text}</span>
-        <span class="text-[10px] text-outline block mt-0.5">${n.time}</span>
-      </div>
-    </div>
-  `).join("");
+  fetch("/api/predictive-warnings")
+    .then(res => {
+      if (!res.ok) throw new Error("Could not load campus alerts");
+      return res.json();
+    })
+    .then(({ warnings = [] }) => {
+      container.replaceChildren();
+      const badge = document.getElementById("notif-badge");
+      if (badge) badge.classList.toggle("hidden", warnings.length === 0);
+      if (!warnings.length) {
+        container.textContent = "No current maintenance alerts.";
+        return;
+      }
+      warnings.forEach(warning => {
+        const item = document.createElement("p");
+        item.className = "p-2 text-xs text-on-surface-variant";
+        item.textContent = warning.message;
+        container.append(item);
+      });
+    })
+    .catch(err => { container.textContent = err.message; });
 }
 
 // Notifications toggle
@@ -203,58 +228,33 @@ document.addEventListener("click", (e) => {
 // ====================================================================
 // ROLE TOGGLING (Student Mode vs Operations Admin)
 // ====================================================================
-function setAppRole(role, autoNavigate = true) {
+function setAppRole(role, autoNavigate = true, user = {}) {
   state.currentRole = role;
-  localStorage.setItem("campuscare_role", role);
-
-  const studentBtn = document.getElementById("mode-student-btn");
-  const operationsBtn = document.getElementById("mode-operations-btn");
+  const studentSection = document.getElementById("nav-student-section");
+  const adminSection = document.getElementById("nav-admin-section");
+  const statusChip = document.getElementById("campus-status-chip");
+  const notifications = document.getElementById("notifications-btn");
   const userName = document.getElementById("user-name");
   const userRole = document.getElementById("user-role-label");
   const userDorm = document.getElementById("user-dorm-badge");
   const userAvatar = document.getElementById("user-avatar");
 
-  if (role === "admin") {
-    if (studentBtn) {
-      studentBtn.className = "flex-1 py-1 px-2 rounded text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-all";
-    }
-    if (operationsBtn) {
-      operationsBtn.className = "flex-1 py-1 px-2 rounded text-xs font-semibold bg-secondary-container text-on-secondary-container shadow-sm transition-all";
-    }
-    if (userName) userName.textContent = "Facilities Ops Dispatch";
-    if (userRole) userRole.textContent = "Lead Operations Engineer";
-    if (userDorm) userDorm.textContent = "Campus-wide";
-    if (userAvatar) {
-      userAvatar.textContent = "OP";
-      userAvatar.className = "w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center text-xs font-bold ring-2 ring-surface-container-lowest shrink-0";
-    }
-    if (autoNavigate && (state.currentView === "report-issue" || state.currentView === "my-reports")) {
-      navigateTo("maintenance-dashboard");
-    }
-  } else {
-    if (studentBtn) {
-      studentBtn.className = "flex-1 py-1 px-2 rounded text-xs font-semibold bg-secondary-container text-on-secondary-container shadow-sm transition-all";
-    }
-    if (operationsBtn) {
-      operationsBtn.className = "flex-1 py-1 px-2 rounded text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-all";
-    }
-    if (userName) userName.textContent = "Alex Rivera";
-    if (userRole) userRole.textContent = "Student / Resident Advisor";
-    if (userDorm) userDorm.textContent = "Block C • 304";
-    if (userAvatar) {
-      userAvatar.textContent = "AR";
-      userAvatar.className = "w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center text-xs font-bold ring-2 ring-surface-container-lowest shrink-0";
-    }
-    if (autoNavigate && state.currentView.startsWith("maintenance-")) {
-      navigateTo("report-issue");
-    }
-  }
+  const isAdmin = role === "admin";
+  if (studentSection) studentSection.classList.toggle("hidden", isAdmin);
+  if (adminSection) adminSection.classList.toggle("hidden", !isAdmin);
+  if (statusChip) statusChip.classList.toggle("hidden", !isAdmin);
+  if (notifications) notifications.classList.toggle("hidden", !isAdmin);
+  if (userName) userName.textContent = user.name || (isAdmin ? "Administrator" : "Student");
+  if (userRole) userRole.textContent = isAdmin ? "Administrator" : "Student";
+  if (userDorm) userDorm.textContent = isAdmin ? "Campus-wide" : (user.student_id || "Student account");
+  if (userAvatar) userAvatar.textContent = (user.name || (isAdmin ? "Admin" : "Student")).slice(0, 2).toUpperCase();
+  if (autoNavigate && isAdmin && ["report-issue", "my-reports"].includes(state.currentView)) navigateTo("maintenance-dashboard");
+  if (autoNavigate && !isAdmin && state.currentView.startsWith("maintenance-")) navigateTo("report-issue");
 }
 
-function toggleRoleSwitch() {
-  const newRole = state.currentRole === "student" ? "admin" : "student";
-  setAppRole(newRole, true);
-  showToast("Role Switched", `Switched to ${newRole === "admin" ? "Operations Admin" : "Student Mode"}`);
+async function logout() {
+  await fetch("/api/auth/logout", { method: "POST" });
+  location.replace("/login");
 }
 
 // Mobile Sidebar Drawer
@@ -346,6 +346,8 @@ function handleImageSelection(file) {
   }
 
   state.selectedImageFile = file;
+  state.isEmergency = false;
+  hideEmergencyBanner();
 
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -502,7 +504,7 @@ async function triggerAiDiagnosis() {
           <div class="flex items-start gap-2">
             <span class="material-symbols-outlined text-[18px] text-error shrink-0">info</span>
             <div>
-              <p class="font-bold">${errorMsg}</p>
+              <p class="font-bold">${escapeHTML(errorMsg)}</p>
               <p class="mt-0.5 text-[11px]">You can still enter the problem details and submit the ticket manually below.</p>
             </div>
           </div>
@@ -519,10 +521,6 @@ async function triggerAiDiagnosis() {
     const selectPriority = document.getElementById("select-priority");
     const inputDepartment = document.getElementById("input-department");
     const inputFix = document.getElementById("input-suggested-fix");
-    const bBox = document.getElementById("ai-bounding-box");
-    const bLabelText = document.getElementById("bounding-label-text");
-    const confMatchBadge = document.getElementById("confidence-match-badge");
-    const confPercentage = document.getElementById("confidence-percentage");
 
     if (inputIssue) inputIssue.value = data.issue;
     if (selectCategory) selectCategory.value = data.category;
@@ -533,14 +531,9 @@ async function triggerAiDiagnosis() {
     onCategoryChanged();
     onPriorityChanged();
 
-    // Show visual overlay on photo
-    if (bBox) bBox.classList.remove("hidden");
-    if (bLabelText) bLabelText.textContent = `${data.category} Defect`;
-    if (confMatchBadge) confMatchBadge.textContent = `${data.confidence || 96.4}% match`;
-    if (confPercentage) confPercentage.textContent = `${data.confidence || 96.4}% Accuracy`;
-
     // Handle Emergency Hazard Banner
-    if (data.is_emergency || data.priority === "CRITICAL") {
+    state.isEmergency = Boolean(data.is_emergency);
+    if (state.isEmergency) {
       showEmergencyBanner();
     } else {
       hideEmergencyBanner();
@@ -604,13 +597,13 @@ function onCategoryChanged() {
     Other: "General Facilities",
   };
   const deptMap = {
-    Electrical: "Electrical Maintenance & Grid Infrastructure Team",
-    Plumbing: "Plumbing & Water Systems Operations",
-    Furniture: "Carpentry & Facilities Operations",
-    Civil: "Civil Works & Structural Maintenance",
-    "IT/Network": "IT & Campus Network Infrastructure",
-    Sanitation: "Sanitation & Housekeeping Services",
-    Other: "General Campus Maintenance Operations",
+    Electrical: "Electrical Maintenance",
+    Plumbing: "Plumbing & Water Works",
+    Furniture: "Carpentry & Facilities",
+    Civil: "Civil Works",
+    "IT/Network": "IT Support",
+    Sanitation: "Sanitation",
+    Other: "General Maintenance",
   };
 
   if (subtitle) subtitle.textContent = subMap[cat] || "Campus Facility";
@@ -633,7 +626,11 @@ function onPriorityChanged() {
   };
   if (subtitle) subtitle.textContent = priSubMap[pri] || pri;
 
-  if (pri === "CRITICAL") {
+  if (state.isEmergency && pri !== "CRITICAL") {
+    select.value = "CRITICAL";
+    if (subtitle) subtitle.textContent = priSubMap.CRITICAL;
+  }
+  if (state.isEmergency) {
     showEmergencyBanner();
   } else {
     hideEmergencyBanner();
@@ -672,12 +669,12 @@ function checkDuplicateLive() {
       if (data.exists && data.existing_ticket) {
         const t = data.existing_ticket;
         indicatorText.innerHTML = `
-          Notice: An open ticket (<strong>#${t.id}</strong>) already exists for ${block} Room ${room} (${category}).
+          Notice: An open ticket (<strong>#${t.id}</strong>) already exists for ${escapeHTML(block)} Room ${escapeHTML(room)} (${escapeHTML(category)}).
           Submitting will link your report to <strong>Master Ticket #${t.id}</strong> (currently ${t.report_count} report${t.report_count > 1 ? "s" : ""}, Priority: <strong>${t.priority}</strong>) and escalate its priority.
         `;
       } else {
         indicatorText.innerHTML = `
-          Notice: No open duplicates found for ${block} Room ${room} (${category}). A new master ticket will be created upon submission.
+          Notice: No open duplicates found for ${escapeHTML(block)} Room ${escapeHTML(room)} (${escapeHTML(category)}). A new master ticket will be created upon submission.
         `;
       }
     } catch (err) {
@@ -813,22 +810,25 @@ async function loadMyReports() {
   const container = document.getElementById("my-tickets-container");
   if (!container) return;
 
-  container.innerHTML = `<div class="p-8 text-center text-on-surface-variant"><span class="inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></span><p class="mt-2 text-xs">Loading campus tickets from database...</p></div>`;
+  container.innerHTML = `<div class="p-8 text-center text-on-surface-variant"><span class="inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></span><p class="mt-2 text-xs">Loading your reports...</p></div>`;
 
   try {
-    const [ticketsRes, metricsRes] = await Promise.all([
-      fetch("/api/tickets?sort_by=priority"),
-      fetch("/api/metrics"),
-    ]);
-
+    const ticketsRes = await fetch("/api/tickets?sort_by=priority");
     const ticketsData = await ticketsRes.json();
-    const metricsData = await metricsRes.json();
+    if (!ticketsRes.ok) throw new Error(ticketsData.detail || "Could not load ticket data.");
 
     state.tickets = ticketsData.tickets || [];
-    renderMyReportsMetrics(metricsData.metrics);
+    renderMyReportsMetrics({
+      total: state.tickets.length,
+      open: state.tickets.filter(t => ["Reported", "Assigned"].includes(t.status)).length,
+      critical_open: state.tickets.filter(t => t.priority === "CRITICAL" && ["Reported", "Assigned"].includes(t.status)).length,
+      fixed: state.tickets.filter(t => t.status === "Fixed").length,
+    });
     renderMyReportsList(state.tickets);
+    const requestedTicket = Number(new URLSearchParams(window.location.search).get("ticket"));
+    if (requestedTicket && state.tickets.some(ticket => ticket.id === requestedTicket)) selectMyTicket(requestedTicket);
   } catch (err) {
-    container.innerHTML = `<div class="p-8 text-center text-error"><p class="text-sm font-bold">Failed to load reports from database: ${err.message}</p></div>`;
+    container.innerHTML = `<div class="p-8 text-center text-error"><p class="text-sm font-bold">Failed to load reports from database: ${escapeHTML(err.message)}</p></div>`;
   }
 }
 
@@ -930,7 +930,7 @@ function renderMyReportsList(ticketList) {
         <div class="mt-space-md p-2 rounded-xl bg-secondary-fixed/50 flex items-center justify-between text-on-secondary-fixed-variant text-xs">
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-[16px] text-secondary">group</span>
-            <span class="font-semibold">${t.report_count} students reported this • Escalated to ${t.priority}</span>
+            <span class="font-semibold">${t.report_count} students reported this â€¢ Escalated to ${t.priority}</span>
           </div>
           <span class="material-symbols-outlined text-[16px]">trending_up</span>
         </div>
@@ -958,17 +958,17 @@ function renderMyReportsList(ticketList) {
 
         <div class="mt-space-md">
           <h2 class="text-base font-semibold text-on-surface group-hover:text-primary transition-colors">
-            ${t.issue}
+            ${escapeHTML(t.issue)}
           </h2>
-          ${t.suggested_fix ? `<p class="mt-1 text-xs text-on-surface-variant line-clamp-2">${t.suggested_fix}</p>` : ''}
+          ${t.suggested_fix ? `<p class="mt-1 text-xs text-on-surface-variant line-clamp-2">${escapeHTML(t.suggested_fix)}</p>` : ''}
         </div>
 
         ${duplicateBanner}
 
         <div class="mt-space-md pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-surface-container text-xs text-on-surface-variant">
           <div class="flex items-center gap-3">
-            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">apartment</span>${t.block} — Rm ${t.room}</span>
-            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">construction</span>${t.category}</span>
+            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">apartment</span>${escapeHTML(t.block)} â€” Rm ${escapeHTML(t.room)}</span>
+            <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[15px]">construction</span>${escapeHTML(t.category)}</span>
           </div>
           <button class="inline-flex items-center gap-1 text-xs font-semibold text-primary group-hover:text-on-primary-container" type="button">
             <span>View Details</span>
@@ -1003,11 +1003,11 @@ function selectMyTicket(ticketId) {
   // Populate preview panel
   document.getElementById("detail-ticket-id").textContent = `Ticket #${ticket.id}`;
   document.getElementById("detail-issue-title").textContent = ticket.issue;
-  document.getElementById("detail-location-text").textContent = `Location: ${ticket.block} — Room ${ticket.room}`;
+  document.getElementById("detail-location-text").textContent = `Location: ${ticket.block} â€” Room ${ticket.room}`;
   document.getElementById("detail-department-text").textContent = `Assigned Department: ${ticket.department}`;
   document.getElementById("detail-suggested-fix").textContent = ticket.suggested_fix || "Standard facilities maintenance inspection protocol.";
   document.getElementById("timeline-created-at").textContent = ticket.created_at;
-  document.getElementById("timeline-category-note").textContent = `Auto-categorized as ${ticket.category} with ${ticket.priority} priority`;
+  document.getElementById("timeline-category-note").textContent = `Category: ${ticket.category}; priority: ${ticket.priority}`;
 
   // Status pill & timeline progression
   const statusPill = document.getElementById("detail-status-pill");
@@ -1019,24 +1019,28 @@ function selectMyTicket(ticketId) {
   const reviewTicketId = document.getElementById("review-ticket-id");
 
   if (statusPill) statusPill.textContent = ticket.status;
+  const step3Title = document.getElementById("timeline-assigned-title");
 
   if (ticket.status === "Reported") {
     if (step3Dot) step3Dot.className = "absolute -left-6 top-1 w-4 h-4 rounded-full bg-surface-container-high ring-4 ring-surface-container-lowest";
     if (step4Dot) step4Dot.className = "absolute -left-6 top-1 w-4 h-4 rounded-full bg-surface-container-high ring-4 ring-surface-container-lowest";
-    if (step4Title) step4Title.textContent = "Facilities Dispatch Pending";
-    if (step4Note) step4Note.textContent = "Awaiting technician assignment slot.";
+    if (step3Title) step3Title.textContent = "Assignment Status";
+    if (step4Title) step4Title.textContent = "Awaiting Assignment";
+    if (step4Note) step4Note.textContent = "No work assignment has been recorded.";
     if (feedbackWidget) feedbackWidget.classList.add("hidden");
   } else if (ticket.status === "Assigned") {
     if (step3Dot) step3Dot.className = "absolute -left-6 top-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center text-white ring-4 ring-surface-container-lowest";
     if (step4Dot) step4Dot.className = "absolute -left-6 top-1 w-4 h-4 rounded-full bg-secondary animate-pulse ring-4 ring-surface-container-lowest";
-    if (step4Title) step4Title.textContent = "Technician Active On-Site";
-    if (step4Note) step4Note.textContent = `Assigned to ${ticket.department}. Work in progress.`;
+    if (step3Title) step3Title.textContent = "Assignment Status";
+    if (step4Title) step4Title.textContent = "Assigned to Maintenance";
+    if (step4Note) step4Note.textContent = `Status marked Assigned at ${ticket.updated_at}.`;
     if (feedbackWidget) feedbackWidget.classList.add("hidden");
   } else if (ticket.status === "Fixed") {
     if (step3Dot) step3Dot.className = "absolute -left-6 top-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center text-white ring-4 ring-surface-container-lowest";
     if (step4Dot) step4Dot.className = "absolute -left-6 top-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center text-white ring-4 ring-surface-container-lowest";
-    if (step4Title) step4Title.textContent = "Issue Resolved & Cleared";
-    if (step4Note) step4Note.textContent = `Completed at ${ticket.updated_at}. Verified functional.`;
+    if (step3Title) step3Title.textContent = "Assignment Status";
+    if (step4Title) step4Title.textContent = "Marked Fixed";
+    if (step4Note) step4Note.textContent = `Status marked Fixed at ${ticket.updated_at}.`;
     if (feedbackWidget) feedbackWidget.classList.remove("hidden");
     if (reviewTicketId) reviewTicketId.textContent = `Ticket #${ticket.id}`;
   }
@@ -1080,15 +1084,14 @@ async function submitTicketReview() {
     const res = await fetch(`/api/tickets/${state.selectedTicketId}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rating: selectedStarRating, comment: "Resident review from tracker" }),
+      body: JSON.stringify({ rating: selectedStarRating, comment: "" }),
     });
-    if (res.ok) {
-      showToast("Feedback Submitted", `Thank you! Rated Ticket #${state.selectedTicketId} with ${selectedStarRating} stars.`);
-      const widget = document.getElementById("review-feedback-widget");
-      if (widget) widget.innerHTML = `<p class="p-3 text-xs font-semibold text-primary text-center">Thank you for rating this repair resolution!</p>`;
-    }
+    if (!res.ok) throw new Error((await res.json()).detail || "Feedback could not be submitted.");
+    showToast("Feedback Submitted", `Thank you! Rated Ticket #${state.selectedTicketId} with ${selectedStarRating} stars.`);
+    const widget = document.getElementById("review-feedback-widget");
+    if (widget) widget.innerHTML = `<p class="p-3 text-xs font-semibold text-primary text-center">Thank you for rating this repair resolution!</p>`;
   } catch (err) {
-    showQuickAlert("Failed to submit review.", true);
+    showQuickAlert(`Failed to submit review: ${err.message}`, true);
   }
 }
 
@@ -1149,8 +1152,8 @@ function renderAdminMetrics(metrics) {
   if (elFixed) elFixed.textContent = metrics.fixed;
 
   if (elSla) {
-    const rate = metrics.total ? Math.round((metrics.fixed / metrics.total) * 100) : 100;
-    elSla.textContent = `${rate}% SLA`;
+    const rate = metrics.total ? Math.round((metrics.fixed / metrics.total) * 100) : 0;
+    elSla.textContent = `${rate}% fixed`;
   }
 }
 
@@ -1286,7 +1289,7 @@ function renderSvgBarChart(counts, total) {
         <g class="transition-all hover:opacity-90 cursor-pointer" onclick="filterHeatmapCell('${b}', 'All')">
           <rect fill="#316383" height="${height}" rx="4" width="${barWidth}" x="${x}" y="${y}"></rect>
           <rect fill="#F6EBC3" height="8" rx="4" width="${barWidth}" x="${x}" y="${y}"></rect>
-          <text fill="#ba1a1a" font-family="Inter" font-size="11" font-weight="700" text-anchor="middle" x="${x + barWidth / 2}" y="${y - 8}">${count} 🔥</text>
+          <text fill="#ba1a1a" font-family="Inter" font-size="11" font-weight="700" text-anchor="middle" x="${x + barWidth / 2}" y="${y - 8}">${count} ðŸ”¥</text>
           <text fill="#1b1c19" font-family="Inter" font-size="11" font-weight="700" text-anchor="middle" x="${x + barWidth / 2}" y="156">${shortLabel}</text>
         </g>
       `;
@@ -1352,11 +1355,11 @@ function renderDashboardTicketsTable(tickets) {
       <tr class="hover:bg-surface-container-low/40 transition-colors">
         <td class="py-3 px-4 font-bold text-on-surface">#${t.id}</td>
         <td class="py-3 px-4 cursor-pointer" onclick="openTicketModal(${t.id})">
-          <div class="font-semibold text-on-surface">${t.issue}</div>
-          <div class="text-xs text-on-surface-variant truncate max-w-xs">${t.suggested_fix || t.department}</div>
+          <div class="font-semibold text-on-surface">${escapeHTML(t.issue)}</div>
+          <div class="text-xs text-on-surface-variant truncate max-w-xs">${escapeHTML(t.suggested_fix || t.department)}</div>
         </td>
         <td class="py-3 px-4 text-on-surface font-medium whitespace-nowrap">
-          <div class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px] text-tertiary">apartment</span>${t.block} Rm ${t.room}</div>
+          <div class="flex items-center gap-1"><span class="material-symbols-outlined text-[16px] text-tertiary">apartment</span>${escapeHTML(t.block)} Rm ${escapeHTML(t.room)}</div>
         </td>
         <td class="py-3 px-4 whitespace-nowrap">${priBadge}</td>
         <td class="py-3 px-4 whitespace-nowrap">
@@ -1394,17 +1397,19 @@ async function loadPredictiveMaintenance() {
   const container = document.getElementById("predictive-patterns-container");
   if (!container) return;
 
-  container.innerHTML = `<div class="p-8 text-center text-on-surface-variant"><span class="inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></span><p class="mt-2 text-xs">Analyzing 30-day recurring incident clusters...</p></div>`;
+      container.innerHTML = `<div class="p-8 text-center text-on-surface-variant"><span class="inline-block w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></span><p class="mt-2 text-xs">Loading ticket patterns from the last 30 days...</p></div>`;
 
   try {
     const res = await fetch("/api/predictive-patterns");
+    if (!res.ok) throw new Error("Could not load recommendations");
     const data = await res.json();
     const patterns = data.patterns || [];
 
     const elHotspots = document.getElementById("pred-metric-hotspots");
-    const elOrders = document.getElementById("pred-metric-orders");
     if (elHotspots) elHotspots.textContent = `${patterns.length} Patterns`;
-    if (elOrders) elOrders.textContent = `${patterns.length * 2} Dispatches`;
+    const ticketsInPatterns = patterns.reduce((total, pattern) => total + pattern.count, 0);
+    const elPatternTickets = document.getElementById("pred-metric-pattern-tickets");
+    if (elPatternTickets) elPatternTickets.textContent = ticketsInPatterns;
 
     if (patterns.length === 0) {
       container.innerHTML = `
@@ -1424,8 +1429,8 @@ async function loadPredictiveMaintenance() {
         ? p.correlated_tickets.map(ct => `
             <div class="p-2 rounded-lg bg-surface-container flex items-center justify-between text-xs cursor-pointer hover:bg-surface-container-high transition-colors" onclick="openTicketModal(${ct.id})">
               <span class="font-bold text-primary">#${ct.id}</span>
-              <span class="text-on-surface truncate mx-2">${ct.issue}</span>
-              <span class="text-error bg-error-container/50 px-1.5 py-0.5 rounded text-[10px] font-semibold">${ct.room}</span>
+              <span class="text-on-surface truncate mx-2">${escapeHTML(ct.issue)}</span>
+              <span class="text-error bg-error-container/50 px-1.5 py-0.5 rounded text-[10px] font-semibold">${escapeHTML(ct.room)}</span>
             </div>
           `).join("")
         : `<p class="text-xs text-on-surface-variant">No individual ticket details available.</p>`;
@@ -1438,17 +1443,17 @@ async function loadPredictiveMaintenance() {
               <div class="flex flex-wrap items-center gap-space-xs">
                 <span class="px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container text-xs font-semibold flex items-center gap-1.5 shadow-sm">
                   <span class="w-2 h-2 rounded-full ${p.severity === 'CRITICAL' ? 'bg-error animate-pulse' : 'bg-secondary'}"></span>
-                  HOTSPOT DETECTED • ${p.count} Issues in 30 Days
+                  HOTSPOT DETECTED â€¢ ${p.count} Issues in 30 Days
                 </span>
                 <span class="px-2.5 py-0.5 rounded-full bg-error-container text-on-error-container text-xs font-bold">${p.severity} RISK</span>
                 <span class="text-xs text-on-surface-variant font-mono">ID: ${p.id}</span>
               </div>
 
               <div>
-                <h3 class="text-xl font-bold text-on-surface tracking-tight">${p.block} — ${p.category} Systemic Recurrence</h3>
+                <h3 class="text-xl font-bold text-on-surface tracking-tight">${escapeHTML(p.block)} â€” ${escapeHTML(p.category)} Systemic Recurrence</h3>
                 <p class="text-xs text-on-surface-variant mt-1 flex items-center gap-1">
                   <span class="material-symbols-outlined text-[16px] text-primary">apartment</span>
-                  <span>Campus Zone ${p.block} Residential Infrastructure</span>
+                  <span>Campus Zone ${escapeHTML(p.block)} Residential Infrastructure</span>
                 </p>
               </div>
 
@@ -1457,7 +1462,7 @@ async function loadPredictiveMaintenance() {
                   <span class="material-symbols-outlined text-[16px] text-primary">science</span>
                   <span>Root Cause Hypothesis</span>
                 </div>
-                <p class="text-xs text-on-surface-variant">${p.root_cause}</p>
+                <p class="text-xs text-on-surface-variant">${escapeHTML(p.root_cause)}</p>
               </div>
 
               <div class="space-y-1.5">
@@ -1470,13 +1475,10 @@ async function loadPredictiveMaintenance() {
               <div class="p-space-md rounded-lg bg-secondary-container/40 flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
                 <div class="space-y-0.5">
                   <span class="text-[11px] text-secondary uppercase font-bold">Recommended Triage Action</span>
-                  <p class="text-xs font-medium text-on-surface">${p.recommended_action}</p>
+                  <p class="text-xs font-medium text-on-surface">${escapeHTML(p.recommended_action)}</p>
                 </div>
                 <div class="flex flex-wrap sm:flex-nowrap gap-2 shrink-0">
-                  <button onclick="createPreventativeOrder('${p.block}', '${p.category}')" class="px-4 py-2 rounded-lg bg-primary-container hover:bg-primary-fixed-dim text-on-primary-container text-xs font-bold transition-all shadow-sm active:scale-95" type="button">
-                    Create Preventative Work Order
-                  </button>
-                  <button onclick="filterHeatmapCell('${p.block}', '${p.category}')" class="px-3 py-2 rounded-lg bg-secondary-container hover:bg-secondary-fixed text-on-secondary-container text-xs font-semibold transition-all" type="button">
+                  <button onclick="filterHeatmapCell(decodeURIComponent('${encodeURIComponent(p.block).replace(/'/g, "%27")}'), decodeURIComponent('${encodeURIComponent(p.category).replace(/'/g, "%27")}'))" class="px-3 py-2 rounded-lg bg-secondary-container hover:bg-secondary-fixed text-on-secondary-container text-xs font-semibold transition-all" type="button">
                     Review History
                   </button>
                 </div>
@@ -1486,21 +1488,21 @@ async function loadPredictiveMaintenance() {
             <!-- Right Telemetry Panel -->
             <div class="w-full lg:w-72 shrink-0 flex flex-col justify-between bg-surface-container-low rounded-xl p-4 space-y-3">
               <div class="space-y-1">
-                <span class="text-[11px] uppercase tracking-wider text-on-surface-variant font-bold">Telemetry Risk Profile</span>
+                <span class="text-[11px] uppercase tracking-wider text-on-surface-variant font-bold">Rule-Based Recurrence</span>
                 <div class="bg-surface-container-highest rounded-lg p-3 text-center space-y-1">
                   <span class="text-2xl font-bold text-error">${p.count}x</span>
                   <p class="text-[11px] text-on-surface font-semibold">Recurrence Density</p>
-                  <span class="text-[10px] text-on-surface-variant">Exceeds threshold of 4</span>
+          <span class="text-[10px] text-on-surface-variant">Threshold: ${p.threshold} reports</span>
                 </div>
               </div>
 
               <div class="space-y-1 bg-surface-container-lowest p-3 rounded-lg">
                 <div class="flex justify-between text-xs">
-                  <span class="text-on-surface-variant">Pattern Confidence</span>
-                  <span class="font-bold text-on-surface">${p.confidence}%</span>
+                  <span class="text-on-surface-variant">Reports / threshold</span>
+                  <span class="font-bold text-on-surface">${p.count} / ${p.threshold}</span>
                 </div>
                 <div class="w-full h-2 rounded-full bg-surface-container-high overflow-hidden">
-                  <div class="h-full bg-error rounded-full" style="width: ${p.confidence}%"></div>
+                  <div class="h-full bg-error rounded-full" style="width: ${Math.min(100, (p.count / p.threshold) * 100)}%"></div>
                 </div>
                 <p class="text-[11px] text-error flex items-center gap-1 pt-1 font-medium">
                   <span class="material-symbols-outlined text-[14px]">priority_high</span>
@@ -1509,8 +1511,8 @@ async function loadPredictiveMaintenance() {
               </div>
 
               <div class="pt-1 flex items-center justify-between text-[11px] text-on-surface-variant border-t border-surface-container">
-                <span>Model: CampusNeural-v3</span>
-                <span>Live Sync</span>
+                <span>Source: Ticket history</span>
+                <span>30-day window</span>
               </div>
             </div>
           </div>
@@ -1518,28 +1520,25 @@ async function loadPredictiveMaintenance() {
       `;
     }).join("");
   } catch (err) {
-    container.innerHTML = `<div class="p-8 text-center text-error"><p class="text-sm font-bold">Failed to load predictive analysis: ${err.message}</p></div>`;
+    container.innerHTML = `<div class="p-8 text-center text-error"><p class="text-sm font-bold">Failed to load predictive analysis: ${escapeHTML(err.message)}</p></div>`;
+    return false;
   }
+  return true;
 }
 
-function runDiagnosticsScan() {
+async function runDiagnosticsScan() {
   const btn = document.getElementById("runDiagnosticsBtn");
   const text = document.getElementById("run-diagnostics-text");
   if (!btn || !text) return;
 
   btn.disabled = true;
-  text.textContent = "Scanning Campus Telemetry...";
-
-  setTimeout(() => {
+  text.textContent = "Refreshing Recommendations...";
+  try {
+    if (await loadPredictiveMaintenance()) showToast("Recommendations Refreshed", "Loaded from current ticket history.");
+  } finally {
     btn.disabled = false;
-    text.textContent = "Run AI Campus Diagnostics";
-    loadPredictiveMaintenance();
-    showToast("Diagnostics Completed", "AI telemetry scan evaluated all 30-day maintenance tickets.");
-  }, 900);
-}
-
-function createPreventativeOrder(block, category) {
-  showToast("Work Order Dispatched", `Preventative inspection team assigned to ${block} (${category}).`);
+    text.textContent = "Refresh Recommendations";
+  }
 }
 
 // ====================================================================
@@ -1556,7 +1555,7 @@ async function loadAdminTickets() {
     state.tickets = data.tickets || [];
     filterAdminTicketsTable();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-xs text-error font-semibold">Failed to load tickets: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-xs text-error font-semibold">Failed to load tickets: ${escapeHTML(err.message)}</td></tr>`;
   }
 }
 
@@ -1584,14 +1583,14 @@ function filterAdminTicketsTable() {
 
   // Client sort
   if (sort === "newest") {
-    list.sort((a, b) => b.id - a.id);
+    list.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id - a.id);
   } else if (sort === "oldest") {
-    list.sort((a, b) => a.id - b.id);
+    list.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id);
   } else if (sort === "reports") {
-    list.sort((a, b) => b.report_count - a.report_count);
+    list.sort((a, b) => b.report_count - a.report_count || Date.parse(b.updated_at) - Date.parse(a.updated_at));
   } else {
     const pOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-    list.sort((a, b) => (pOrder[a.priority] || 4) - (pOrder[b.priority] || 4));
+    list.sort((a, b) => (pOrder[a.priority] ?? 4) - (pOrder[b.priority] ?? 4) || Date.parse(b.updated_at) - Date.parse(a.updated_at));
   }
 
   if (list.length === 0) {
@@ -1619,12 +1618,12 @@ function filterAdminTicketsTable() {
       <tr class="hover:bg-surface-container-low/50 transition-colors">
         <td class="py-3 px-4 font-bold text-on-surface">#${t.id}</td>
         <td class="py-3 px-4 font-semibold text-on-surface cursor-pointer hover:text-primary max-w-xs truncate" onclick="openTicketModal(${t.id})">
-          ${t.issue}
+          ${escapeHTML(t.issue)}
         </td>
-        <td class="py-3 px-3 whitespace-nowrap">${t.category}</td>
+        <td class="py-3 px-3 whitespace-nowrap">${escapeHTML(t.category)}</td>
         <td class="py-3 px-3 whitespace-nowrap">${priBadge}</td>
-        <td class="py-3 px-3 whitespace-nowrap font-medium">${t.block} Rm ${t.room}</td>
-        <td class="py-3 px-3 truncate max-w-[140px] text-on-surface-variant">${t.department}</td>
+        <td class="py-3 px-3 whitespace-nowrap font-medium">${escapeHTML(t.block)} Rm ${escapeHTML(t.room)}</td>
+        <td class="py-3 px-3 truncate max-w-[140px] text-on-surface-variant">${escapeHTML(t.department)}</td>
         <td class="py-3 px-2 text-center font-bold text-secondary">${t.report_count}</td>
         <td class="py-3 px-3 whitespace-nowrap">${statusBadge}</td>
         <td class="py-3 px-3 text-right whitespace-nowrap">
@@ -1672,7 +1671,7 @@ async function openTicketModal(ticketId) {
 
     document.getElementById("modal-ticket-id").textContent = `#${data.id}`;
     document.getElementById("modal-issue").textContent = data.issue;
-    document.getElementById("modal-location").textContent = `${data.block} • Room ${data.room}`;
+    document.getElementById("modal-location").textContent = `${data.block} â€¢ Room ${data.room}`;
     document.getElementById("modal-category").textContent = data.category;
     document.getElementById("modal-department").textContent = data.department;
     document.getElementById("modal-reports").textContent = `${data.report_count} report${data.report_count > 1 ? "s" : ""}`;
@@ -1773,15 +1772,11 @@ function renderAnalyticsBars(containerId, dataMap, color) {
 // ====================================================================
 async function savePlatformSettings() {
   const secInput = document.getElementById("setting-security-contact");
-  const openaiInput = document.getElementById("setting-openai-key");
-  const geminiInput = document.getElementById("setting-gemini-key");
   const threshInput = document.getElementById("setting-threshold");
   const statusLabel = document.getElementById("settings-save-status");
 
   const payload = {};
   if (secInput) payload.security_contact = secInput.value.trim();
-  if (openaiInput && openaiInput.value.trim()) payload.openai_key = openaiInput.value.trim();
-  if (geminiInput && geminiInput.value.trim()) payload.gemini_key = geminiInput.value.trim();
   if (threshInput) payload.threshold = parseInt(threshInput.value, 10) || 4;
 
   try {

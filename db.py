@@ -39,6 +39,7 @@ DEPARTMENT_MAP = {
 def _connection() -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(DB_PATH, timeout=10)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     try:
         yield connection
         connection.commit()
@@ -62,8 +63,28 @@ def _normalize_block(block: str) -> str:
 
 
 def init_db() -> None:
-    """Create the ticket and reviews tables and required indexes."""
+    """Create and migrate the authoritative CampusCare database schema."""
     with _connection() as connection:
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                student_id TEXT UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('student', 'admin')),
+                created_at TEXT NOT NULL,
+                CHECK((role = 'student' AND student_id IS NOT NULL) OR
+                      (role = 'admin' AND student_id IS NULL))
+            )"""
+        )
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS auth_sessions (
+                token_hash TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                expires_at TEXT NOT NULL
+            )"""
+        )
         connection.execute(
             """CREATE TABLE IF NOT EXISTS tickets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,6 +112,13 @@ def init_db() -> None:
                 FOREIGN KEY (ticket_id) REFERENCES tickets(id)
             )"""
         )
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS ticket_owners (
+                ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                PRIMARY KEY (ticket_id, user_id)
+            )"""
+        )
 
         # Performance indexes as required by spec #34
         connection.execute("CREATE INDEX IF NOT EXISTS idx_tickets_block ON tickets(block);")
@@ -100,6 +128,8 @@ def init_db() -> None:
         connection.execute("CREATE INDEX IF NOT EXISTS idx_tickets_priority ON tickets(priority);")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_tickets_created_at ON tickets(created_at);")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_tickets_open_lookup ON tickets(block, room, category, status);")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_ticket_owners_user ON ticket_owners(user_id, ticket_id);")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON auth_sessions(expires_at);")
 
         # Migrate any single-letter blocks ('A' -> 'Block A')
         connection.execute(
@@ -131,7 +161,7 @@ def check_duplicate_open_ticket(block: str, room: str, category: str) -> dict | 
         return dict(row) if row else None
 
 
-def add_ticket(t: dict) -> tuple[int, bool]:
+def add_ticket(t: dict, owner_id: int | None = None) -> tuple[int, bool]:
     """Insert a ticket, or merge it into a matching open ticket.
     
     MUST return (ticket_id, merged).
@@ -143,11 +173,6 @@ def add_ticket(t: dict) -> tuple[int, bool]:
     issue = _required_text(t, "issue")
     category = _required_text(t, "category")
     priority = _required_text(t, "priority")
-    department = t.get("department")
-    if not department or not str(department).strip():
-        department = DEPARTMENT_MAP.get(category, "General Campus Operations")
-    else:
-        department = str(department).strip()
 
     suggested_fix = t.get("suggested_fix")
     if suggested_fix is not None and not isinstance(suggested_fix, str):
@@ -160,10 +185,13 @@ def add_ticket(t: dict) -> tuple[int, bool]:
 
     if category not in CATEGORIES:
         raise ValueError(f"Invalid category '{category}'. Choose one of: {', '.join(CATEGORIES)}.")
+    department = DEPARTMENT_MAP[category]
     if priority not in PRIORITIES:
         raise ValueError(f"Invalid priority '{priority}'. Choose one of: {', '.join(PRIORITIES)}.")
+    if block not in BLOCKS:
+        raise ValueError(f"Invalid block '{raw_block}'. Choose one of: {', '.join(BLOCKS)}.")
 
-    now = datetime.now().isoformat(timespec="seconds", sep=" ")
+    now = datetime.now().isoformat(timespec="microseconds", sep=" ")
     init_db()
     with _connection() as connection:
         existing = connection.execute(
@@ -179,6 +207,11 @@ def add_ticket(t: dict) -> tuple[int, bool]:
                 "UPDATE tickets SET priority = ?, report_count = report_count + 1, updated_at = ? WHERE id = ?",
                 (escalated, now, existing["id"]),
             )
+            if owner_id is not None:
+                connection.execute(
+                    "INSERT OR IGNORE INTO ticket_owners(ticket_id, user_id) VALUES (?, ?)",
+                    (existing["id"], owner_id),
+                )
             return int(existing["id"]), True
 
         cursor = connection.execute(
@@ -188,7 +221,100 @@ def add_ticket(t: dict) -> tuple[int, bool]:
                VALUES (?, ?, ?, ?, ?, ?, ?, 'Reported', 1, ?, ?)""",
             (issue, category, priority, department, suggested_fix, block, room, now, now),
         )
-        return int(cursor.lastrowid), False
+        ticket_id = int(cursor.lastrowid)
+        if owner_id is not None:
+            connection.execute(
+                "INSERT INTO ticket_owners(ticket_id, user_id) VALUES (?, ?)",
+                (ticket_id, owner_id),
+            )
+        return ticket_id, False
+
+
+def get_tickets_for_owner(user_id: int, **filters: Any) -> list[dict]:
+    """Return only tickets associated with one authenticated student."""
+    tickets = get_tickets(**filters)
+    if not tickets:
+        return []
+    ticket_ids = [ticket["id"] for ticket in tickets]
+    placeholders = ",".join("?" for _ in ticket_ids)
+    with _connection() as connection:
+        owned = {
+            row["ticket_id"]
+            for row in connection.execute(
+                f"SELECT ticket_id FROM ticket_owners WHERE user_id = ? AND ticket_id IN ({placeholders})",
+                [user_id, *ticket_ids],
+            )
+        }
+    return [ticket for ticket in tickets if ticket["id"] in owned]
+
+
+def owns_ticket(ticket_id: int, user_id: int) -> bool:
+    init_db()
+    with _connection() as connection:
+        return connection.execute(
+            "SELECT 1 FROM ticket_owners WHERE ticket_id = ? AND user_id = ?",
+            (ticket_id, user_id),
+        ).fetchone() is not None
+
+
+def create_user_record(name: str, email: str, student_id: str | None, password_hash: str, role: str) -> dict:
+    if role not in ("student", "admin") or (role == "student") != (student_id is not None):
+        raise ValueError("Invalid user role or student ID.")
+    init_db()
+    now = datetime.now().isoformat(timespec="seconds", sep=" ")
+    with _connection() as connection:
+        cursor = connection.execute(
+            "INSERT INTO users(name, email, student_id, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (name.strip(), email.strip().lower(), student_id.strip() if student_id else None, password_hash, role, now),
+        )
+        return dict(connection.execute(
+            "SELECT id, name, email, student_id, role, created_at FROM users WHERE id = ?",
+            (cursor.lastrowid,),
+        ).fetchone())
+
+
+def get_user_by_email(email: str) -> dict | None:
+    init_db()
+    with _connection() as connection:
+        row = connection.execute("SELECT * FROM users WHERE email = ? COLLATE NOCASE", (email.strip(),)).fetchone()
+        return dict(row) if row else None
+
+
+def get_user_by_id(user_id: int) -> dict | None:
+    init_db()
+    with _connection() as connection:
+        row = connection.execute(
+            "SELECT id, name, email, student_id, role, created_at FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def save_session(token_hash: str, user_id: int, expires_at: str) -> None:
+    init_db()
+    with _connection() as connection:
+        connection.execute("DELETE FROM auth_sessions WHERE expires_at <= datetime('now')")
+        connection.execute(
+            "INSERT INTO auth_sessions(token_hash, user_id, expires_at) VALUES (?, ?, ?)",
+            (token_hash, user_id, expires_at),
+        )
+
+
+def get_session_user(token_hash: str) -> dict | None:
+    init_db()
+    with _connection() as connection:
+        row = connection.execute(
+            """SELECT u.id, u.name, u.email, u.student_id, u.role
+               FROM auth_sessions s JOIN users u ON u.id = s.user_id
+               WHERE s.token_hash = ? AND s.expires_at > datetime('now')""",
+            (token_hash,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def delete_session(token_hash: str) -> None:
+    init_db()
+    with _connection() as connection:
+        connection.execute("DELETE FROM auth_sessions WHERE token_hash = ?", (token_hash,))
 
 
 def get_tickets(
@@ -271,7 +397,7 @@ def update_ticket_status(ticket_id: int, status: str) -> bool:
     if status not in STATUSES:
         raise ValueError(f"Invalid status. Choose one of: {', '.join(STATUSES)}.")
     init_db()
-    now = datetime.now().isoformat(timespec="seconds", sep=" ")
+    now = datetime.now().isoformat(timespec="microseconds", sep=" ")
     with _connection() as connection:
         cursor = connection.execute(
             "UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?",
@@ -359,7 +485,7 @@ def get_predictive_patterns(threshold: int = 4) -> list[dict]:
                 "Other": f"Initiate preventative facility maintenance walk-through in {block}.",
             }
 
-            pattern_id = f"PTN-2026-{block.replace('Block ', '')}{idx+1:02d}"
+            pattern_id = f"PTN-{block.replace('Block ', '')}{idx+1:02d}"
 
             results.append(
                 {
@@ -367,13 +493,13 @@ def get_predictive_patterns(threshold: int = 4) -> list[dict]:
                     "block": block,
                     "category": category,
                     "count": count,
+                    "threshold": threshold,
                     "message": w["message"],
                     "root_cause": root_cause_map.get(category, f"Correlated component degradation in {block}."),
                     "recommended_action": recommended_action_map.get(
                         category, f"Schedule comprehensive inspection for {block}."
                     ),
-                    "confidence": min(85 + count * 2, 98),
-                    "severity": "CRITICAL" if count >= 6 or category == "Electrical" else "HIGH",
+                    "severity": "CRITICAL" if count >= 6 else "HIGH",
                     "correlated_tickets": correlated,
                 }
             )

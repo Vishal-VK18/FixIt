@@ -1,7 +1,9 @@
-"""Comprehensive verification tests for CampusCare Maintenance Platform."""
+﻿"""Comprehensive verification tests for CampusCare Maintenance Platform."""
 
 import os
+from io import BytesIO
 from pathlib import Path
+from PIL import Image
 import pytest
 from fastapi.testclient import TestClient
 
@@ -53,6 +55,7 @@ def test_shared_ticket_contract_and_duplicate_detection():
     assert saved1["priority"] == "LOW"
     assert saved1["report_count"] == 1
     assert saved1["block"] == "Block C"
+    initial_updated_at = saved1["updated_at"]
 
     # 2. Duplicate submission for same block, room, category while OPEN (Reported)
     ticket_payload_dup = {
@@ -70,6 +73,7 @@ def test_shared_ticket_contract_and_duplicate_detection():
 
     saved2 = db.get_ticket(tid1)
     assert saved2["report_count"] == 2
+    assert saved2["updated_at"] > initial_updated_at
     # Escalation: LOW -> MEDIUM
     assert saved2["priority"] == "MEDIUM"
 
@@ -101,6 +105,7 @@ def test_shared_ticket_contract_and_duplicate_detection():
     assert update_res is True
     fixed_ticket = db.get_ticket(tid1)
     assert fixed_ticket["status"] == "Fixed"
+    assert fixed_ticket["updated_at"] > saved5["updated_at"]
 
     # 7. IMPORTANT REQUIREMENT: Fixed ticket must NOT block a new report!
     tid6, merged6 = db.add_ticket(ticket_payload)
@@ -184,14 +189,12 @@ def test_predictive_maintenance_and_hotspots():
 
 def test_ai_unconfigured_behavior():
     """Verify that unconfigured AI returns explicit error and never fake data."""
-    # Ensure no API keys set
-    old_openai = os.environ.pop("OPENAI_API_KEY", None)
     old_gemini = os.environ.pop("GEMINI_API_KEY", None)
-    old_google = os.environ.pop("GOOGLE_API_KEY", None)
-
     try:
-        # Call analyze endpoint with dummy image file
-        dummy_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+        # Use a valid image so this test reaches credential handling.
+        image_buffer = BytesIO()
+        Image.new("RGB", (1, 1)).save(image_buffer, format="PNG")
+        dummy_png = image_buffer.getvalue()
         res = client.post(
             "/api/analyze-image",
             files={"file": ("test.png", dummy_png, "image/png")},
@@ -199,11 +202,10 @@ def test_ai_unconfigured_behavior():
         assert res.status_code == 400
         data = res.json()
         assert data["configured"] is False
-        assert "AI analysis is not configured. Add the required API credentials to continue." in data["error"]
+        assert "Set GEMINI_API_KEY" in data["error"]
     finally:
-        if old_openai: os.environ["OPENAI_API_KEY"] = old_openai
-        if old_gemini: os.environ["GEMINI_API_KEY"] = old_gemini
-        if old_google: os.environ["GOOGLE_API_KEY"] = old_google
+        if old_gemini is not None:
+            os.environ["GEMINI_API_KEY"] = old_gemini
 
 
 def test_priority_sorting():
@@ -247,6 +249,8 @@ def test_ticket_review_feedback():
     import uuid
     room = f"REV-{uuid.uuid4().hex[:6]}"
     tid, _ = db.add_ticket({"issue": "Review test fan", "category": "Electrical", "priority": "LOW", "block": "Block D", "room": room})
+    pending_review = client.post(f"/api/tickets/{tid}/review", json={"rating": 5, "comment": "Not fixed yet"})
+    assert pending_review.status_code == 400
     db.update_ticket_status(tid, "Fixed")
 
     res = client.post(f"/api/tickets/{tid}/review", json={"rating": 5, "comment": "Fast turnaround and friendly tech!"})
@@ -290,5 +294,3 @@ def test_html_routes():
         assert res.status_code == 200
         assert "CAMPUSCARE" in res.text
         assert "text-on-surface" in res.text
-
-

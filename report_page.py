@@ -1,4 +1,4 @@
-"""Student Maintenance Reporting Page for FixIt.
+﻿"""Student Maintenance Reporting Page for FixIt.
 
 Provides photo capture / file upload, location entry (Block & Room),
 AI vision analysis trigger, emergency alert presentation,
@@ -6,6 +6,7 @@ ticket submission, and duplicate ticket notification.
 """
 
 import os
+import logging
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -17,6 +18,9 @@ import auth
 import config
 import database
 import vision
+from gemini_client import GeminiVisionError
+
+logger = logging.getLogger(__name__)
 
 
 def save_image_to_disk(image_bytes: bytes, extension: str = "jpg") -> str:
@@ -37,25 +41,25 @@ def render_priority_badge(priority: str) -> str:
             "bg": "#fee2e2",
             "text": "#b91c1c",
             "border": "#ef4444",
-            "icon": "🚨",
+            "icon": "ðŸš¨",
         },
         "HIGH": {
             "bg": "#ffedd5",
             "text": "#c2410c",
             "border": "#f97316",
-            "icon": "⚠️",
+            "icon": "âš ï¸",
         },
         "MEDIUM": {
             "bg": "#fef3c7",
             "text": "#b45309",
             "border": "#f59e0b",
-            "icon": "⚡",
+            "icon": "âš¡",
         },
         "LOW": {
             "bg": "#dcfce7",
             "text": "#15803d",
             "border": "#22c55e",
-            "icon": "✅",
+            "icon": "âœ…",
         },
     }
     cfg = color_map.get(p_upper, color_map["MEDIUM"])
@@ -94,7 +98,7 @@ def render_emergency_alert() -> None:
             box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.1);
         ">
             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-                <span style="font-size: 28px;">🚨</span>
+                <span style="font-size: 28px;">ðŸš¨</span>
                 <span style="font-size: 22px; font-weight: 800; color: #991b1b; letter-spacing: 0.02em;">
                     EMERGENCY ALERT
                 </span>
@@ -112,7 +116,7 @@ def render_emergency_alert() -> None:
                     Contact Campus Security immediately:
                 </span>
                 <span style="color: #b91c1c; font-size: 20px; font-weight: 800; font-family: monospace;">
-                    📞 {security_number}
+                    ðŸ“ž {security_number}
                 </span>
             </div>
         </div>
@@ -148,7 +152,7 @@ def render_report_page() -> None:
         """
         <div style="margin-bottom: 24px;">
             <h1 style="margin-bottom: 4px; font-weight: 800; color: #1e293b;">
-                🔧 Report a Campus Issue
+                ðŸ”§ Report a Campus Issue
             </h1>
             <p style="color: #64748b; font-size: 16px; margin: 0;">
                 Capture or upload a photo of the maintenance problem. Our AI will analyze the hazard, identify the category, and route it to the proper facility department.
@@ -198,7 +202,7 @@ def render_report_page() -> None:
                     margin: 20px 0;
                 ">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                        <span style="font-size: 24px;">ℹ️</span>
+                        <span style="font-size: 24px;">â„¹ï¸</span>
                         <span style="font-size: 20px; font-weight: 700; color: #b45309;">
                             This report was merged into an existing ticket.
                         </span>
@@ -230,7 +234,7 @@ def render_report_page() -> None:
                     margin: 20px 0;
                 ">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                        <span style="font-size: 24px;">✅</span>
+                        <span style="font-size: 24px;">âœ…</span>
                         <span style="font-size: 20px; font-weight: 700; color: #15803d;">
                             Ticket submitted successfully.
                         </span>
@@ -344,7 +348,7 @@ def render_report_page() -> None:
     )
 
     analyze_clicked = st.button(
-        "🔍 Analyze",
+        "ðŸ” Analyze",
         type="primary",
         disabled=is_busy,
         help="Run AI Vision inspection on the photo to detect the issue, hazard level, and department.",
@@ -353,12 +357,12 @@ def render_report_page() -> None:
     if analyze_clicked:
         # Step 1: Validation
         if not image_bytes:
-            st.error("⚠️ Please upload or capture an image before analyzing.")
+            st.error("âš ï¸ Please upload or capture an image before analyzing.")
             return
 
         if not room or not room.strip():
             st.error(
-                "⚠️ Please specify the Room Number / Area before running analysis."
+                "âš ï¸ Please specify the Room Number / Area before running analysis."
             )
             return
 
@@ -370,9 +374,13 @@ def render_report_page() -> None:
             ):
                 result = vision.analyze_image(image_bytes)
                 st.session_state["analysis_result"] = result
-        except Exception as exc:
-            st.error(f"Analysis error: {exc}")
-            st.session_state["analysis_result"] = vision.get_safe_fallback()
+        except GeminiVisionError as exc:
+            st.error(str(exc))
+            st.session_state.pop("analysis_result", None)
+        except Exception:
+            logger.exception("Unexpected AI image analysis failure")
+            st.error("AI analysis failed. Please retry or enter the issue manually.")
+            st.session_state.pop("analysis_result", None)
         finally:
             st.session_state["is_analyzing"] = False
             st.rerun()
@@ -417,7 +425,7 @@ def render_report_page() -> None:
                     <div>
                         <span style="font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase;">Assigned Department</span>
                         <div style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 4px;">
-                            🏢 {result.get('department', 'General Maintenance')}
+                            ðŸ¢ {result.get('department', 'General Maintenance')}
                         </div>
                     </div>
                 </div>
@@ -430,7 +438,7 @@ def render_report_page() -> None:
                 <div style="border-top: 1px solid #f1f5f9; padding-top: 16px;">
                     <span style="font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase;">Suggested Fix</span>
                     <div style="font-size: 15px; color: #475569; margin-top: 4px;">
-                        💡 {result.get('suggested_fix', 'Inspect and resolve.')}
+                        ðŸ’¡ {result.get('suggested_fix', 'Inspect and resolve.')}
                     </div>
                 </div>
             </div>
@@ -454,7 +462,7 @@ def render_report_page() -> None:
         ) or st.session_state.get("is_analyzing", False)
 
         submit_clicked = st.button(
-            "📤 Submit Ticket",
+            "ðŸ“¤ Submit Ticket",
             type="primary",
             disabled=submit_disabled,
             help="Submit this analyzed report to the campus facility management system.",

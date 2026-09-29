@@ -5,7 +5,11 @@ department mappings, and AI vision settings.
 """
 
 import os
+import math
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # Base Paths
 BASE_DIR = Path(__file__).resolve().parent
@@ -18,7 +22,7 @@ DATABASE_PATH = os.environ.get("DATABASE_PATH", str(BASE_DIR / "fixit.db"))
 # Security & Campus Emergency Contacts
 SECURITY_CONTACT_NUMBER = os.environ.get(
     "SECURITY_CONTACT_NUMBER",
-    "Campus Security: (555) 123-SAFE / +1-555-019-4321",
+    "",
 )
 
 # Campus Blocks
@@ -104,6 +108,10 @@ MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"]
 
 # Vision LLM Configuration
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-VISION_MODEL = os.environ.get("VISION_MODEL", "gemini-2.0-flash")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+try:
+    configured_timeout = float(os.environ.get("GEMINI_TIMEOUT_SECONDS", "60"))
+    GEMINI_TIMEOUT_SECONDS = min(120.0, max(1.0, configured_timeout)) if math.isfinite(configured_timeout) else 60.0
+except (TypeError, ValueError):
+    GEMINI_TIMEOUT_SECONDS = 60.0

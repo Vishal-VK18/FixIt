@@ -8,8 +8,8 @@
 
 ### 1. Student Issue Reporting & AI Diagnostics
 - **Photo Upload & Camera Capture**: Live HTML5 camera preview, snap frame, retake, and image drag-and-drop.
-- **Real AI Vision Analysis**: Powered by OpenAI / Google Gemini vision APIs. Extracts issue title, category, priority tier, assigned department, recommended fix, and detects severe safety hazards.
-- **Strict No-Fake-Fallbacks**: If AI API keys are unconfigured, the application clearly states: *"AI analysis is not configured. Add the required API credentials to continue."* and allows manual entry without generating fake predictions.
+- **Real AI Vision Analysis**: Powered by Google Gemini Vision using server-side `GEMINI_API_KEY`. Extracts issue title, category, priority, suggested fix, and emergency status.
+- **Strict No-Fake-Fallbacks**: If `GEMINI_API_KEY` is missing, the application reports the configuration error without generating fake predictions.
 - **Severe Safety Alert**: When emergency hazards (fire, sparks, exposed wires, live water leaks near electricity) are detected, displays an emergency banner with configurable `SECURITY_CONTACT_NUMBER`. If unconfigured, clearly states *"Security contact number not configured."*
 - **Campus Block & Room Validation**: Validated residential facilities (`Block A`, `Block B`, `Block C`, `Block D`, `Block E`).
 - **Live Duplicate Detection Preview**: Real-time checking against the database to alert students if a matching open ticket already exists in the same room.
@@ -49,7 +49,7 @@
 ## 🛠️ Technology Stack
 - **Backend**: Python 3.12, FastAPI, Uvicorn, SQLite 3, Pydantic v2
 - **Frontend**: Stitch-generated HTML5 UI, Tailwind CSS (Design Tokens & Color Palette: `#8FBFE3` Icy Blue, `#F6EBC3` Buttermilk, `#1b1c19` Slate), Material Symbols Outlined, Inter typography
-- **AI Diagnostics**: OpenAI Vision (`gpt-4o-mini`) / Google Gemini Vision (`gemini-1.5-flash`)
+- **AI Diagnostics**: Google Gemini Vision (`gemini-3.8-flash`)
 - **Testing**: Pytest, FastAPI TestClient
 
 ---
@@ -77,7 +77,9 @@
    PORT=8000
    HOST=0.0.0.0
    SECURITY_CONTACT_NUMBER=555-0199
-   OPENAI_API_KEY=your_openai_key_here
+   GEMINI_API_KEY=your_gemini_api_key_here
+   GEMINI_MODEL=gemini-3.8-flash
+   GEMINI_TIMEOUT_SECONDS=60
    PREDICTIVE_THRESHOLD=4
    ```
 

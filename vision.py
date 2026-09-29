@@ -1,11 +1,10 @@
-"""AI Vision Analysis Module for FixIt Campus Maintenance.
+﻿"""AI Vision Analysis Module for FixIt Campus Maintenance.
 
-Provides image analysis using Vision LLMs (Google Gemini / OpenAI),
+Provides image analysis using Google Gemini,
 validates and normalizes responses, applies application-side emergency
 overrides, maps categories to departments, and returns safe fallbacks on failure.
 """
 
-import base64
 import io
 import json
 import logging
@@ -14,9 +13,9 @@ import re
 from typing import Any, Dict, Optional, Tuple
 
 from PIL import Image
-import requests
 
 import config
+from gemini_client import generate_content
 
 logger = logging.getLogger("fixit.vision")
 if not logger.handlers:
@@ -326,282 +325,17 @@ def _call_gemini_vision(
     if not api_key:
         return None
 
-    model = config.VISION_MODEL or "gemini-2.0-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-
-    b64_image = base64.b64encode(photo_bytes).decode("utf-8")
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": VISION_SYSTEM_PROMPT},
-                    {
-                        "inline_data": {
-                            "mime_type": mime_type,
-                            "data": b64_image,
-                        }
-                    },
-                ]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.1,
-            "response_mime_type": "application/json",
-        },
-    }
-
-    try:
-        response = requests.post(
-            url,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=15.0,
-        )
-        if response.status_code != 200:
-            logger.error(
-                "Gemini API returned status code %s: %s",
-                response.status_code,
-                response.text[:200],
-            )
-            return None
-
-        result_json = response.json()
-        candidates = result_json.get("candidates", [])
-        if not candidates:
-            return None
-
-        content_parts = (
-            candidates[0].get("content", {}).get("parts", [])
-        )
-        if not content_parts:
-            return None
-
-        text_content = content_parts[0].get("text", "")
-        return validate_and_normalize_result(text_content)
-    except Exception as exc:
-        logger.error("Gemini API call failed: %s", exc)
-        return None
-
-
-def _call_openai_vision(
-    photo_bytes: bytes, mime_type: str
-) -> Optional[Dict[str, Any]]:
-    """Call OpenAI Vision API via Chat Completions endpoint."""
-    api_key = config.OPENAI_API_KEY
-    if not api_key:
-        return None
-
-    url = "https://api.openai.com/v1/chat/completions"
-    b64_image = base64.b64encode(photo_bytes).decode("utf-8")
-
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": VISION_SYSTEM_PROMPT},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type};base64,{b64_image}"
-                        },
-                    },
-                ],
-            }
-        ],
-        "response_format": {"type": "json_object"},
-        "temperature": 0.1,
-    }
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
-    try:
-        response = requests.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=15.0,
-        )
-        if response.status_code != 200:
-            logger.error(
-                "OpenAI API returned status code %s: %s",
-                response.status_code,
-                response.text[:200],
-            )
-            return None
-
-        result_json = response.json()
-        choices = result_json.get("choices", [])
-        if not choices:
-            return None
-
-        text_content = choices[0].get("message", {}).get("content", "")
-        return validate_and_normalize_result(text_content)
-    except Exception as exc:
-        logger.error("OpenAI API call failed: %s", exc)
-        return None
-
-
-def _offline_heuristic_analysis(
-    photo_bytes: bytes, mime_type: str
-) -> Optional[Dict[str, Any]]:
-    """Smart offline/test heuristic when no external LLM API is available.
-
-    Inspects image comments, embedded text, and test markers to enable full
-    deterministic test-suite execution even without active paid API keys.
-    """
-    try:
-        # Check if an environment mock scenario is forced
-        mock_env = os.environ.get("FIXIT_MOCK_SCENARIO")
-        if mock_env == "broken_chair":
-            return validate_and_normalize_result(
-                {
-                    "issue": "Broken chair with damaged leg",
-                    "category": "Furniture",
-                    "priority": "MEDIUM",
-                    "suggested_fix": "Repair or replace the damaged chair.",
-                    "is_emergency": False,
-                }
-            )
-        elif mock_env == "peeling_paint":
-            return validate_and_normalize_result(
-                {
-                    "issue": "Peeling paint and wall plaster defect",
-                    "category": "Civil",
-                    "priority": "LOW",
-                    "suggested_fix": "Scrape and repaint the affected wall area.",
-                    "is_emergency": False,
-                }
-            )
-        elif mock_env == "sparking_panel":
-            return validate_and_normalize_result(
-                {
-                    "issue": "Sparking electrical panel with exposed arcing",
-                    "category": "Electrical",
-                    "priority": "CRITICAL",
-                    "suggested_fix": "Disconnect power immediately and dispatch licensed electrician.",
-                    "is_emergency": True,
-                }
-            )
-        elif mock_env == "flooding":
-            return validate_and_normalize_result(
-                {
-                    "issue": "Severe water flooding across hallway floor",
-                    "category": "Plumbing",
-                    "priority": "CRITICAL",
-                    "suggested_fix": "Shut off main water valve and dispatch emergency plumbers.",
-                    "is_emergency": True,
-                }
-            )
-
-        # Inspect image metadata/info dictionary for test hints
-        image = Image.open(io.BytesIO(photo_bytes))
-        metadata_str = ""
-        for k, v in image.info.items():
-            metadata_str += f" {k} {v}"
-
-        lower_meta = metadata_str.lower()
-        if "chair" in lower_meta or "furniture" in lower_meta:
-            return validate_and_normalize_result(
-                {
-                    "issue": "Broken chair with unstable seat",
-                    "category": "Furniture",
-                    "priority": "MEDIUM",
-                    "suggested_fix": "Replace or repair broken chair.",
-                    "is_emergency": False,
-                }
-            )
-        elif "paint" in lower_meta or "peeling" in lower_meta:
-            return validate_and_normalize_result(
-                {
-                    "issue": "Peeling paint on classroom wall",
-                    "category": "Civil",
-                    "priority": "LOW",
-                    "suggested_fix": "Repaint damaged wall surface.",
-                    "is_emergency": False,
-                }
-            )
-        elif "spark" in lower_meta or "electrical panel" in lower_meta:
-            return validate_and_normalize_result(
-                {
-                    "issue": "Sparking electrical panel with electrical arcing",
-                    "category": "Electrical",
-                    "priority": "CRITICAL",
-                    "suggested_fix": "Cut main circuit breaker and dispatch electrician.",
-                    "is_emergency": True,
-                }
-            )
-        elif "flood" in lower_meta or "flooding" in lower_meta:
-            return validate_and_normalize_result(
-                {
-                    "issue": "Severe water flooding inside corridor",
-                    "category": "Plumbing",
-                    "priority": "CRITICAL",
-                    "suggested_fix": "Isolate leak and deploy water extraction pumps.",
-                    "is_emergency": True,
-                }
-            )
-
-        return None
-    except Exception:
-        return None
+    text_content = generate_content(VISION_SYSTEM_PROMPT, photo_bytes, mime_type)
+    return validate_and_normalize_result(text_content)
 
 
 def analyze_image(photo_bytes: bytes) -> Dict[str, Any]:
-    """Analyze campus maintenance issue from photo bytes using AI Vision.
-
-    Args:
-        photo_bytes: Raw bytes of the captured or uploaded photo.
-
-    Returns:
-        Validated dictionary containing:
-        - issue: str
-        - category: str (Electrical | Plumbing | Furniture | Civil | IT/Network | Sanitation | Other)
-        - priority: str (LOW | MEDIUM | HIGH | CRITICAL)
-        - department: str (Deterministic department mapping)
-        - suggested_fix: str
-        - is_emergency: bool
-    """
-    # Step 1: Validate image bytes
     is_valid, err_msg, mime_type = validate_image_bytes(photo_bytes)
     if not is_valid:
-        logger.warning("Image validation failed: %s", err_msg)
-        return get_safe_fallback(
-            custom_issue="Invalid or unreadable image uploaded"
-        )
-
-    # Step 2: Check for test simulation / offline heuristics
-    heuristic_res = _offline_heuristic_analysis(photo_bytes, mime_type or "image/jpeg")
-    if heuristic_res is not None:
-        return heuristic_res
-
-    # Step 3: Call configured Vision LLM (Gemini or OpenAI)
-    try:
-        # Check Gemini first
-        if config.GEMINI_API_KEY:
-            res = _call_gemini_vision(photo_bytes, mime_type or "image/jpeg")
-            if res:
-                return res
-
-        # Check OpenAI second
-        if config.OPENAI_API_KEY:
-            res = _call_openai_vision(photo_bytes, mime_type or "image/jpeg")
-            if res:
-                return res
-
-        # If no API key configured or calls failed, safely fall back
-        if not config.GEMINI_API_KEY and not config.OPENAI_API_KEY:
-            logger.info("No Vision API key configured. Returning safe fallback.")
-        else:
-            logger.warning(
-                "All Vision API calls failed. Returning safe fallback."
-            )
-
-        return get_safe_fallback()
-    except Exception as exc:
-        logger.error("Unexpected exception during image analysis: %s", exc)
-        return get_safe_fallback()
+        raise ValueError(err_msg)
+    if not config.GEMINI_API_KEY:
+        raise ValueError("AI analysis is not configured. Set GEMINI_API_KEY in the server .env file.")
+    result = _call_gemini_vision(photo_bytes, mime_type or "image/jpeg")
+    if result is None:
+        raise RuntimeError("Gemini Vision analysis failed. Check the server logs and API configuration.")
+    return result
