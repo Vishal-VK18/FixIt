@@ -152,16 +152,6 @@
 
       <!-- Navigation Links Container -->
       <div class="flex-1 overflow-y-auto px-space-md py-space-sm space-y-space-md">
-        <!-- Mode Switcher: Student vs Operations -->
-        <div class="p-1 bg-surface-container rounded-lg flex items-center justify-between text-center select-none">
-          <button id="mode-student-btn" class="flex-1 py-1 px-2 rounded text-xs font-semibold bg-secondary-container text-on-secondary-container shadow-sm transition-all" onclick="setAppRole('student')" type="button">
-            Student Mode
-          </button>
-          <button id="mode-operations-btn" class="flex-1 py-1 px-2 rounded text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-all" onclick="setAppRole('admin')" type="button">
-            Operations
-          </button>
-        </div>
-
         <!-- Student Portal Navigation -->
         <div class="space-y-1" id="nav-student-section">
           <div class="px-2 py-1 text-[11px] uppercase tracking-wider text-on-surface-variant font-semibold flex items-center gap-1.5">
@@ -221,8 +211,8 @@
               <span id="user-role-label" class="text-[10px] text-on-surface-variant truncate">Student</span>
             </div>
           </div>
-          <button onclick="toggleRoleSwitch()" class="text-on-surface-variant hover:text-primary hover:bg-surface-container p-1 rounded-lg transition-colors flex items-center justify-center" title="Switch Role / Mode" type="button">
-            <span class="material-symbols-outlined text-[18px]">swap_horiz</span>
+          <button id="logout-btn" class="text-on-surface-variant hover:text-primary hover:bg-surface-container p-1 rounded-lg transition-colors flex items-center justify-center" title="Sign out" aria-label="Sign out" type="button">
+            <span class="material-symbols-outlined text-[18px]">logout</span>
           </button>
         </div>
         <div class="flex items-center justify-between pt-1 border-t border-surface-container">
@@ -276,9 +266,9 @@
         </div>
 
         <!-- User Profile Pill -->
-        <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center cursor-pointer shadow-sm" onclick="toggleRoleSwitch()" title="Toggle Role">
-          <span class="material-symbols-outlined text-on-primary text-[18px]">person</span>
-        </div>
+        <button id="header-logout-btn" class="w-8 h-8 rounded-full bg-primary flex items-center justify-center cursor-pointer shadow-sm" type="button" aria-label="Sign out" title="Sign out">
+          <span class="material-symbols-outlined text-on-primary text-[18px]">logout</span>
+        </button>
       </div>
     </header>
 
@@ -303,7 +293,7 @@
               <div>
                 <h1 class="text-2xl sm:text-3xl font-bold text-on-surface tracking-tight">Report a Campus Issue</h1>
                 <p class="text-sm sm:text-base text-on-surface-variant mt-1 max-w-2xl">
-                  Upload a photo for an AI issue, category, and priority suggestion when Gemini is configured.
+                  Upload a photo for an AI issue, category, and priority suggestion when OpenRouter is configured.
                 </p>
               </div>
               <!-- 3-Step Civic Intake Flow -->
@@ -1557,7 +1547,7 @@
               </div>
             </div>
 
-            <p class="text-xs text-on-surface-variant">Configure GEMINI_API_KEY in the server .env file to enable image diagnosis. The key is never sent to the browser.</p>
+            <p class="text-xs text-on-surface-variant">Configure OPENROUTER_API_KEY in the server .env file to enable image diagnosis. The key is never sent to the browser.</p>
 
             <!-- Predictive Maintenance Threshold -->
             <div class="space-y-1.5 pt-2 border-t border-surface-container">

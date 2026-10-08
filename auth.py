@@ -16,6 +16,8 @@ SESSION_HOURS = 12
 def hash_password(password: str) -> str:
     if len(password) < 12:
         raise ValueError("Password must contain at least 12 characters.")
+    if len(password) > 256:
+        raise ValueError("Password must contain no more than 256 characters.")
     salt = secrets.token_bytes(16)
     hashed = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, PASSWORD_ITERATIONS)
     return f"pbkdf2_sha256${PASSWORD_ITERATIONS}${salt.hex()}${hashed.hex()}"

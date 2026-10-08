@@ -70,7 +70,7 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 email TEXT NOT NULL COLLATE NOCASE UNIQUE,
-                student_id TEXT UNIQUE,
+                student_id TEXT COLLATE NOCASE UNIQUE,
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL CHECK(role IN ('student', 'admin')),
                 created_at TEXT NOT NULL,
@@ -232,20 +232,7 @@ def add_ticket(t: dict, owner_id: int | None = None) -> tuple[int, bool]:
 
 def get_tickets_for_owner(user_id: int, **filters: Any) -> list[dict]:
     """Return only tickets associated with one authenticated student."""
-    tickets = get_tickets(**filters)
-    if not tickets:
-        return []
-    ticket_ids = [ticket["id"] for ticket in tickets]
-    placeholders = ",".join("?" for _ in ticket_ids)
-    with _connection() as connection:
-        owned = {
-            row["ticket_id"]
-            for row in connection.execute(
-                f"SELECT ticket_id FROM ticket_owners WHERE user_id = ? AND ticket_id IN ({placeholders})",
-                [user_id, *ticket_ids],
-            )
-        }
-    return [ticket for ticket in tickets if ticket["id"] in owned]
+    return get_tickets(**filters, owner_id=user_id)
 
 
 def owns_ticket(ticket_id: int, user_id: int) -> bool:
@@ -324,6 +311,7 @@ def get_tickets(
     priority: str | None = None,
     search: str | None = None,
     sort_by: str = "priority",
+    owner_id: int | None = None,
 ) -> list[dict]:
     """Retrieve tickets with optional filtering and priority sorting."""
     init_db()
@@ -332,6 +320,10 @@ def get_tickets(
 
     conditions = []
     params: list[Any] = []
+
+    if owner_id is not None:
+        conditions.append("EXISTS (SELECT 1 FROM ticket_owners WHERE ticket_id = tickets.id AND user_id = ?)")
+        params.append(owner_id)
 
     if status and status != "All":
         conditions.append("status = ?")

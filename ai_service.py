@@ -2,15 +2,11 @@
 
 import json
 import os
-import re
 from typing import Any
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
+import config
 import db
-from gemini_client import generate_content
+from openrouter_client import request_vision
 
 CATEGORIES = (
     "Electrical",
@@ -23,6 +19,7 @@ CATEGORIES = (
 )
 
 PRIORITIES = ("LOW", "MEDIUM", "HIGH", "CRITICAL")
+REQUIRED_FIELDS = {"issue", "category", "priority", "department", "suggested_fix", "is_emergency"}
 
 EMERGENCY_KEYWORDS = [
     "fire",
@@ -47,8 +44,8 @@ EMERGENCY_KEYWORDS = [
 
 
 def is_ai_configured() -> bool:
-    """Check whether the server has a Gemini API key configured."""
-    return bool(os.getenv("GEMINI_API_KEY", "").strip())
+    """Check whether the server has an OpenRouter API key configured."""
+    return bool((config.OPENROUTER_API_KEY or "").strip())
 
 
 def get_security_contact() -> str | None:
@@ -57,62 +54,51 @@ def get_security_contact() -> str | None:
     return contact if contact else None
 
 
+class AIAnalysisError(RuntimeError):
+    """The provider response did not satisfy CampusCare's analysis contract."""
+
+
 def analyze_image_with_ai(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict[str, Any]:
-    """Analyze image using Google's Gemini API.
-    
-    If unconfigured, raises ValueError with required spec message.
-    Never returns fake or fabricated data.
-    """
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-
-    if not api_key:
-        raise ValueError("AI analysis is not configured. Set GEMINI_API_KEY in the server .env file.")
-
+    """Analyze an image with OpenRouter and validate the CampusCare contract."""
     prompt = (
         "You are the CampusCare AI Diagnostic Assistant. Analyze the provided image of a university/campus facility issue.\n"
-        "Identify the core problem, categorize it, determine the severity priority, suggest an actionable fix, and detect if this is a severe safety hazard.\n\n"
-        "Return ONLY a valid JSON object with these exact keys:\n"
+        "Return only strict JSON with exactly these six keys and no markdown or extra fields:\n"
         "{\n"
         '  "issue": "concise description of the specific damage or malfunction",\n'
         '  "category": "one of: Electrical, Plumbing, Furniture, Civil, IT/Network, Sanitation, Other",\n'
         '  "priority": "one of: LOW, MEDIUM, HIGH, CRITICAL",\n'
+        '  "department": "the matching department listed below",\n'
         '  "suggested_fix": "recommended physical maintenance action protocol",\n'
-        '  "is_emergency": true or false (true if active fire, sparks, bare live wiring, severe flooding near power, or imminent personal injury danger)\n'
-        "}\n\n"
-        "Urgency rules: CRITICAL for fire, sparks, exposed live wires, flooding or water near electricity, or immediate danger; HIGH for loss of an essential service or active damage; MEDIUM for broken but usable items; LOW for minor cosmetic issues. If is_emergency is true, priority MUST be CRITICAL."
+        '  "is_emergency": true or false\n'
+        "}\n"
+        "Department mapping: " + "; ".join(f"{category}={department}" for category, department in db.DEPARTMENT_MAP.items()) + ".\n"
+        "Priority rules: CRITICAL for sparks, exposed live wires, fire, flooding, water near electricity, or immediate safety hazards; HIGH for essential service failure, active damage, or major electrical/plumbing failure; MEDIUM for broken but usable equipment or normal maintenance; LOW for minor/cosmetic issues. Any fire, sparks, flooding, exposed electrical hazard, or immediate safety hazard MUST set is_emergency=true and priority=CRITICAL."
     )
 
-    raw_response_text = generate_content(prompt, image_bytes, mime_type)
-
-    # Parse JSON output from model
-    clean_json = raw_response_text.strip()
-    if "```" in clean_json:
-        # Extract markdown json block
-        match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean_json, re.DOTALL)
-        if match:
-            clean_json = match.group(1)
-
+    raw_response_text = request_vision(prompt, image_bytes, mime_type)
     try:
-        parsed = json.loads(clean_json)
-    except json.JSONDecodeError:
-        raise RuntimeError(f"AI response could not be parsed as JSON: {raw_response_text[:120]}")
+        parsed = json.loads(raw_response_text)
+    except json.JSONDecodeError as exc:
+        raise AIAnalysisError("OpenRouter returned malformed JSON. Please retry the image analysis.") from exc
 
-    if not isinstance(parsed, dict) or any(
-        key not in parsed for key in ("issue", "category", "priority", "suggested_fix", "is_emergency")
-    ):
-        raise RuntimeError("AI response is missing one or more required fields.")
-    if not all(isinstance(parsed[key], str) and parsed[key].strip() for key in ("issue", "category", "priority", "suggested_fix")) or not isinstance(parsed["is_emergency"], bool):
-        raise RuntimeError("AI response contains invalid field values.")
+    if not isinstance(parsed, dict) or set(parsed) != REQUIRED_FIELDS:
+        raise AIAnalysisError("OpenRouter response must contain exactly the required CampusCare fields.")
+    if not all(isinstance(parsed[key], str) and parsed[key].strip() for key in ("issue", "category", "priority", "department", "suggested_fix")) or not isinstance(parsed["is_emergency"], bool):
+        raise AIAnalysisError("OpenRouter response contains invalid CampusCare field values.")
     issue = parsed["issue"].strip()
-    category = str(parsed.get("category", "Other")).strip()
+    category = parsed["category"].strip()
     if category not in CATEGORIES:
-        raise RuntimeError("AI response contains an invalid category.")
+        raise AIAnalysisError("OpenRouter response contains an invalid category.")
 
-    priority = str(parsed.get("priority", "MEDIUM")).strip().upper()
+    priority = parsed["priority"].strip().upper()
     if priority not in PRIORITIES:
-        raise RuntimeError("AI response contains an invalid priority.")
+        raise AIAnalysisError("OpenRouter response contains an invalid priority.")
 
-    suggested_fix = str(parsed.get("suggested_fix", "")).strip()
+    department = db.DEPARTMENT_MAP[category]
+    if parsed["department"].strip() != department:
+        raise AIAnalysisError("OpenRouter response contains an invalid department.")
+
+    suggested_fix = parsed["suggested_fix"].strip()
     is_emergency = parsed["is_emergency"]
 
     # Detect keyword-based emergency hazards as required by section 12
@@ -130,7 +116,7 @@ def analyze_image_with_ai(image_bytes: bytes, mime_type: str = "image/jpeg") -> 
         "issue": issue,
         "category": category,
         "priority": priority,
-        "department": db.DEPARTMENT_MAP[category],
+        "department": department,
         "suggested_fix": suggested_fix,
         "is_emergency": is_emergency,
     }

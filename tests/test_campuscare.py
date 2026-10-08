@@ -5,13 +5,10 @@ from io import BytesIO
 from pathlib import Path
 from PIL import Image
 import pytest
-from fastapi.testclient import TestClient
 
 import db
 import ai_service
 from app import app
-
-client = TestClient(app)
 
 
 def test_db_init_and_schema():
@@ -116,11 +113,12 @@ def test_shared_ticket_contract_and_duplicate_detection():
     assert saved6["report_count"] == 1
 
 
-def test_api_ticket_routes():
+def test_api_ticket_routes(client):
     """Verify API POST /api/tickets and GET /api/tickets."""
     import uuid
     api_room = f"API-{uuid.uuid4().hex[:6]}"
     # Test POST
+    client.post("/api/auth/student/login", json={"email": "student@example.test", "password": client.test_student_password})
     res = client.post(
         "/api/tickets",
         json={
@@ -147,6 +145,7 @@ def test_api_ticket_routes():
 
     # Test PATCH status
     ticket_id = data["ticket_id"]
+    client.post("/api/auth/admin/login", json={"email": "admin@example.test", "password": client.test_admin_password})
     patch_res = client.patch(
         f"/api/tickets/{ticket_id}/status",
         json={"status": "Assigned"},
@@ -155,7 +154,7 @@ def test_api_ticket_routes():
     assert patch_res.json()["ticket"]["status"] == "Assigned"
 
 
-def test_metrics_calculation():
+def test_metrics_calculation(client):
     """Verify metrics calculation strictly derives from database."""
     res = client.get("/api/metrics")
     assert res.status_code == 200
@@ -167,7 +166,7 @@ def test_metrics_calculation():
     assert metrics["total"] >= metrics["open"]
 
 
-def test_predictive_maintenance_and_hotspots():
+def test_predictive_maintenance_and_hotspots(client):
     """Verify predictive maintenance calculations and hotspot matrix."""
     # Hotspot matrix
     h_res = client.get("/api/hotspots")
@@ -187,25 +186,18 @@ def test_predictive_maintenance_and_hotspots():
     assert isinstance(w_data["warnings"], list)
 
 
-def test_ai_unconfigured_behavior():
+def test_ai_unconfigured_behavior(client, monkeypatch):
     """Verify that unconfigured AI returns explicit error and never fake data."""
-    old_gemini = os.environ.pop("GEMINI_API_KEY", None)
-    try:
-        # Use a valid image so this test reaches credential handling.
-        image_buffer = BytesIO()
-        Image.new("RGB", (1, 1)).save(image_buffer, format="PNG")
-        dummy_png = image_buffer.getvalue()
-        res = client.post(
-            "/api/analyze-image",
-            files={"file": ("test.png", dummy_png, "image/png")},
-        )
-        assert res.status_code == 400
-        data = res.json()
-        assert data["configured"] is False
-        assert "Set GEMINI_API_KEY" in data["error"]
-    finally:
-        if old_gemini is not None:
-            os.environ["GEMINI_API_KEY"] = old_gemini
+    import config
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", None)
+    image_buffer = BytesIO()
+    Image.new("RGB", (1, 1)).save(image_buffer, format="PNG")
+    client.post("/api/auth/student/login", json={"email": "student@example.test", "password": client.test_student_password})
+    res = client.post("/api/analyze-image", files={"file": ("test.png", image_buffer.getvalue(), "image/png")})
+    assert res.status_code == 400
+    data = res.json()
+    assert data["configured"] is False
+    assert "Set OPENROUTER_API_KEY" in data["error"]
 
 
 def test_priority_sorting():
@@ -244,11 +236,14 @@ def test_predictive_maintenance_30_day_cutoff():
     assert not any(w["category"] == "Sanitation" and w["block"] == "Block E" for w in warnings_after)
 
 
-def test_ticket_review_feedback():
+def test_ticket_review_feedback(client):
     """Verify resident review submission for resolved tickets."""
     import uuid
     room = f"REV-{uuid.uuid4().hex[:6]}"
     tid, _ = db.add_ticket({"issue": "Review test fan", "category": "Electrical", "priority": "LOW", "block": "Block D", "room": room})
+    with db._connection() as con:
+        con.execute("INSERT INTO ticket_owners(ticket_id, user_id) VALUES (?, ?)", (tid, client.test_student["id"]))
+    client.post("/api/auth/student/login", json={"email": "student@example.test", "password": client.test_student_password})
     pending_review = client.post(f"/api/tickets/{tid}/review", json={"rating": 5, "comment": "Not fixed yet"})
     assert pending_review.status_code == 400
     db.update_ticket_status(tid, "Fixed")
@@ -262,7 +257,7 @@ def test_ticket_review_feedback():
     assert bad_res.status_code == 422 or bad_res.status_code == 400
 
 
-def test_config_endpoint_and_security_contact():
+def test_config_endpoint_and_security_contact(client):
     """Verify GET /api/config and POST /api/config."""
     res = client.get("/api/config")
     assert res.status_code == 200
@@ -278,8 +273,9 @@ def test_config_endpoint_and_security_contact():
     assert post_res.json()["config"]["predictive_threshold"] == 4
 
 
-def test_html_routes():
+def test_html_routes(client):
     """Verify all Stitch HTML page routes load successfully."""
+    client.post("/api/auth/student/login", json={"email": "student@example.test", "password": client.test_student_password})
     for path in [
         "/",
         "/report-issue",
@@ -290,7 +286,10 @@ def test_html_routes():
         "/analytics",
         "/settings",
     ]:
-        res = client.get(path)
-        assert res.status_code == 200
-        assert "CAMPUSCARE" in res.text
-        assert "text-on-surface" in res.text
+        res = client.get(path, follow_redirects=False)
+        if path in ("/maintenance-dashboard", "/predictive-maintenance", "/maintenance-tickets", "/analytics", "/settings"):
+            assert res.status_code == 303
+        else:
+            assert res.status_code == 200
+            assert "CAMPUSCARE" in res.text
+            assert "text-on-surface" in res.text

@@ -1,14 +1,13 @@
 """Verify clean behavior and proper empty states when the database contains no tickets."""
 
 from pathlib import Path
-import sqlite3
-import pytest
+import uuid
 import db
 
 
-def test_empty_database_behavior(tmp_path):
+def test_empty_database_behavior():
     """Ensure database returns proper zero/empty states without crashing when empty."""
-    temp_db = tmp_path / "empty_tickets.db"
+    temp_db = Path(__file__).resolve().parent / f"empty-{uuid.uuid4().hex}.db"
     
     # Temporarily point db to empty_db
     orig_path = db.DB_PATH
@@ -47,3 +46,4 @@ def test_empty_database_behavior(tmp_path):
 
     finally:
         db.DB_PATH = orig_path
+        temp_db.unlink(missing_ok=True)

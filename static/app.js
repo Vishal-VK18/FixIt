@@ -49,8 +49,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Route from server template or url path
   const initial = window.INITIAL_VIEW || window.location.pathname.replace("/", "") || "report-issue";
-  setAppRole(state.currentRole, false, session);
+  applyAuthenticatedUser(session);
   document.getElementById("logout-btn")?.addEventListener("click", logout);
+  document.getElementById("header-logout-btn")?.addEventListener("click", logout);
   navigateTo(initial, false);
 
   // Poll duplicate check on report issue
@@ -226,9 +227,10 @@ document.addEventListener("click", (e) => {
 });
 
 // ====================================================================
-// ROLE TOGGLING (Student Mode vs Operations Admin)
+// ROLE-SPECIFIC NAVIGATION FROM THE AUTHENTICATED SESSION
 // ====================================================================
-function setAppRole(role, autoNavigate = true, user = {}) {
+function applyAuthenticatedUser(user) {
+  const role = user.role;
   state.currentRole = role;
   const studentSection = document.getElementById("nav-student-section");
   const adminSection = document.getElementById("nav-admin-section");
@@ -248,8 +250,6 @@ function setAppRole(role, autoNavigate = true, user = {}) {
   if (userRole) userRole.textContent = isAdmin ? "Administrator" : "Student";
   if (userDorm) userDorm.textContent = isAdmin ? "Campus-wide" : (user.student_id || "Student account");
   if (userAvatar) userAvatar.textContent = (user.name || (isAdmin ? "Admin" : "Student")).slice(0, 2).toUpperCase();
-  if (autoNavigate && isAdmin && ["report-issue", "my-reports"].includes(state.currentView)) navigateTo("maintenance-dashboard");
-  if (autoNavigate && !isAdmin && state.currentView.startsWith("maintenance-")) navigateTo("report-issue");
 }
 
 async function logout() {

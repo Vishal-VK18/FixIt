@@ -9,15 +9,14 @@ import math
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent / ".env")
+PROJECT_DIR = Path(__file__).resolve().parent
+ENV_FILE = PROJECT_DIR / ".env"
+load_dotenv(ENV_FILE)
 
 # Base Paths
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = PROJECT_DIR
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-# Database Configuration
-DATABASE_PATH = os.environ.get("DATABASE_PATH", str(BASE_DIR / "fixit.db"))
 
 # Security & Campus Emergency Contacts
 SECURITY_CONTACT_NUMBER = os.environ.get(
@@ -66,15 +65,6 @@ DEPARTMENT_MAP = {
 }
 
 # Standard Safe Fallback Analysis Result
-DEFAULT_FALLBACK_RESULT = {
-    "issue": "Unable to automatically identify the issue",
-    "category": "Other",
-    "priority": "MEDIUM",
-    "suggested_fix": "Maintenance staff should inspect the reported issue.",
-    "is_emergency": False,
-    "department": "General Maintenance",
-}
-
 # Application-Side Emergency Keywords / Patterns
 EMERGENCY_KEYWORDS = [
     "fire",
@@ -107,11 +97,11 @@ EMERGENCY_KEYWORDS = [
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"]
 
-# Vision LLM Configuration
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+# OpenRouter vision configuration
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "").strip() or "openrouter/free"
 try:
-    configured_timeout = float(os.environ.get("GEMINI_TIMEOUT_SECONDS", "60"))
-    GEMINI_TIMEOUT_SECONDS = min(120.0, max(1.0, configured_timeout)) if math.isfinite(configured_timeout) else 60.0
+    configured_timeout = float(os.environ.get("OPENROUTER_TIMEOUT_SECONDS", "60"))
+    OPENROUTER_TIMEOUT_SECONDS = min(120.0, max(1.0, configured_timeout)) if math.isfinite(configured_timeout) else 60.0
 except (TypeError, ValueError):
-    GEMINI_TIMEOUT_SECONDS = 60.0
+    OPENROUTER_TIMEOUT_SECONDS = 60.0

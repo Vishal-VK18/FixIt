@@ -2,26 +2,31 @@
 
 import os
 import logging
+import html
+from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
+PROJECT_DIR = Path(__file__).resolve().parent
+load_dotenv(PROJECT_DIR / ".env")
+
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from PIL import Image, UnidentifiedImageError
 
 import ai_service
 import auth
+import config
 import db
-from gemini_client import GeminiVisionError
+from ai_service import AIAnalysisError
+from openrouter_client import OpenRouterError
 
-load_dotenv()
-
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = PROJECT_DIR
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
 logger = logging.getLogger(__name__)
@@ -29,13 +34,19 @@ logger = logging.getLogger(__name__)
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
 
-# Ensure database is initialized on startup
-db.init_db()
+@asynccontextmanager
+async def lifespan(_app):
+    logger.info("OPENROUTER_API_KEY configured: %s", "YES" if ai_service.is_ai_configured() else "NO")
+    logger.info("OPENROUTER_MODEL: %s", config.OPENROUTER_MODEL)
+    db.init_db()
+    yield
+
 
 app = FastAPI(
     title="CampusCare Maintenance Platform",
     description="Real campus maintenance and issue reporting platform with AI diagnostics.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -66,15 +77,17 @@ class ConfigUpdate(BaseModel):
 
 
 class StudentRegister(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(..., min_length=1, max_length=120)
     email: str = Field(..., min_length=3, max_length=254)
     student_id: str = Field(..., min_length=1, max_length=80)
-    password: str = Field(..., min_length=12, max_length=256)
+    password: SecretStr
 
 
 class LoginRequest(BaseModel):
     email: str
-    password: str
+    password: SecretStr
 
 
 def current_user(request: Request) -> dict:
@@ -109,7 +122,7 @@ def _login_page(request: Request) -> Response:
     next_path = request.query_params.get("next", "/")
     if not next_path.startswith("/") or next_path.startswith("//"):
         next_path = "/"
-    return HTMLResponse(index_file.read_text(encoding="utf-8").replace("{{NEXT_PATH}}", next_path))
+    return HTMLResponse(index_file.read_text(encoding="utf-8").replace("{{NEXT_PATH}}", html.escape(next_path, quote=True)))
 
 
 def _protected_page(request: Request, initial_view: str, role: str) -> Response:
@@ -151,7 +164,7 @@ async def route_login(request: Request):
 async def register_student(body: StudentRegister, response: Response):
     import sqlite3
     try:
-        user = auth.create_account(body.name, body.email, body.password, body.student_id, role="student")
+        user = auth.create_account(body.name, body.email, body.password.get_secret_value(), body.student_id, role="student")
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="That email or student ID is already registered.") from exc
     except ValueError as exc:
@@ -162,7 +175,7 @@ async def register_student(body: StudentRegister, response: Response):
 
 @app.post("/api/auth/student/login")
 async def student_login(body: LoginRequest, response: Response):
-    user = auth.authenticate(body.email, body.password, "student")
+    user = auth.authenticate(body.email, body.password.get_secret_value(), "student")
     if not user:
         raise HTTPException(status_code=401, detail="Invalid student email or password.")
     _set_session_cookie(response, auth.create_session(user["id"]))
@@ -171,7 +184,7 @@ async def student_login(body: LoginRequest, response: Response):
 
 @app.post("/api/auth/admin/login")
 async def admin_login(body: LoginRequest, response: Response):
-    user = auth.authenticate(body.email, body.password, "admin")
+    user = auth.authenticate(body.email, body.password.get_secret_value(), "admin")
     if not user:
         raise HTTPException(status_code=401, detail="Invalid admin email or password.")
     _set_session_cookie(response, auth.create_session(user["id"]))
@@ -408,7 +421,7 @@ async def analyze_image(
     if mime_type not in formats:
         raise HTTPException(status_code=400, detail="Upload a JPEG, PNG, or WEBP image.")
 
-    image_bytes = await file.read()
+    image_bytes = await file.read(10 * 1024 * 1024 + 1)
     if len(image_bytes) == 0:
         raise HTTPException(status_code=400, detail="The selected image file is empty.")
 
@@ -417,6 +430,8 @@ async def analyze_image(
         raise HTTPException(status_code=400, detail="Image file exceeds maximum 10MB limit.")
     try:
         image = Image.open(BytesIO(image_bytes))
+        if image.width * image.height > 50_000_000:
+            raise HTTPException(status_code=400, detail="Image dimensions are too large to analyze safely.")
         image.verify()
         if image.format != formats[mime_type]:
             raise HTTPException(status_code=400, detail="Image content does not match its file type.")
@@ -426,12 +441,15 @@ async def analyze_image(
     try:
         analysis = await run_in_threadpool(ai_service.analyze_image_with_ai, image_bytes, mime_type)
         return {"success": True, "analysis": analysis}
-    except GeminiVisionError as e:
-        logger.warning("Gemini image analysis failed: %s", e)
+    except OpenRouterError as e:
+        logger.warning("OpenRouter image analysis failed: %s", e)
         return JSONResponse(
             status_code=e.status_code,
-            content={"success": False, "configured": True, "error": str(e)},
+            content={"success": False, "configured": e.configured, "error": str(e)},
         )
+    except AIAnalysisError as e:
+        logger.warning("AI analysis response validation failed: %s", e)
+        return JSONResponse(status_code=502, content={"success": False, "configured": True, "error": str(e)})
     except ValueError as e:
         # Expected unconfigured credentials error
         return JSONResponse(
@@ -460,10 +478,10 @@ async def submit_review(ticket_id: int, review: ReviewCreate, user: dict = Depen
     ticket = db.get_ticket(ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail=f"Ticket #{ticket_id} not found.")
-    if ticket["status"] != "Fixed":
-        raise HTTPException(status_code=400, detail="Feedback is only available after a ticket is Fixed.")
     if not db.owns_ticket(ticket_id, user["id"]):
         raise HTTPException(status_code=404, detail="Ticket not found.")
+    if ticket["status"] != "Fixed":
+        raise HTTPException(status_code=400, detail="Feedback is only available after a ticket is Fixed.")
     try:
         review_id = db.add_ticket_review(ticket_id, review.rating, review.comment or "")
         return {"success": True, "review_id": review_id}
