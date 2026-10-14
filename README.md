@@ -4,6 +4,7 @@ CampusCare is the FastAPI + Stitch campus maintenance application. It stores tic
 
 ## Setup
 
+
 ```powershell
 py -m pip install -r requirements.txt
 Copy-Item .env.example .env
